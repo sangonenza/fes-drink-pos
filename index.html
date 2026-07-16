@@ -1391,7 +1391,7 @@ function renderShiftEditor(){
   $id('mbox').innerHTML = `<div class="mhead"><b>シフトを編集(${di+1}日目)</b><button class="x" onclick="closeModal()">閉じる</button></div>
     <label class="fld">スタッフを選ぶ(複数可)</label>
     <div class="chips">${staffNames.length ? staffNames.map(n=>`
-      <button class="${ui.shiftPick[n]?'sel':''}" onclick="toggleShiftPick(decodeURIComponent('${encodeURIComponent(n)}'))">${esc(n)}</button>`).join('')
+      <button class="${ui.shiftPick[n]?'sel':''}" onclick="toggleShiftPick(decodeURIComponent('${encodeURIComponent(n).replace(/'/g,'%27')}'))">${esc(n)}</button>`).join('')
       : '<span class="sub">先にスタッフタブで名簿を登録してください</span>'}</div>
     <div class="row">
       <div class="grow"><label class="fld">開始</label><input id="sh-s" type="time" value="${esc(ui.shS||S.event.open||'10:30')}"></div>
@@ -1423,6 +1423,7 @@ function addShifts(){
   const names = Object.keys(ui.shiftPick).filter(n=>ui.shiftPick[n]);
   if (!names.length){ toast('スタッフを選んでください'); return; }
   if (!s || !e || toMin(e)<=toMin(s)){ toast('時間を確認してください(終了は開始より後)'); return; }
+  S.event.shifts = normShifts(S.event.shifts); // モーダル表示中に同期が旧形式を取り込んでも壊れないように
   for (const name of names) S.event.shifts[dKey].push({s, e, name, loc});
   pushEventConfig();
   ui.shiftPick = {}; ui.shS = e; ui.shE = ''; ui.shLoc = loc; // 次の枠の開始=今回の終了
@@ -1433,6 +1434,7 @@ function delShift(idx){
   const day = ui.ttDay || (days.includes(today) ? today : days[0]);
   const dKey = Math.max(0, days.indexOf(day))===0 ? 'd1' : 'd2';
   ui.shS = $id('sh-s').value; ui.shE = $id('sh-e').value; ui.shLoc = $id('sh-loc').value;
+  S.event.shifts = normShifts(S.event.shifts);
   S.event.shifts[dKey].splice(idx, 1);
   pushEventConfig();
   renderShiftEditor(); render();
