@@ -210,13 +210,14 @@ const DEFAULT_EVENT = {
   days: ['2026-07-18','2026-07-19'],
   open: '10:30', end: '21:00',
   tt: {
-    d1saka: "11:35-12:15 チーナ\n12:55-13:35 浪漫革命\n14:10-14:50 DENIMS\n15:30-16:10 TENDRE\n16:50-17:30 Homecomings\n18:10-18:50 saccharin\n19:35-20:20 んoon",
-    d1oka: "11:00-11:30 Johnson KOGA\n12:20-12:50 松澤在音\n13:35-14:05 Gingersamm\n14:55-15:25 SYAYOS\n16:15-16:45 mayu (band set)\n17:35-18:05 Nikoん\n18:55-19:30 ゴリラ祭ーズ",
-    d2saka: "11:25-12:05 Khaki\n12:45-13:25 トリプルファイヤー\n14:05-14:45 DYGL\n15:25-16:05 YONA YONA WEEKENDERS\n16:45-17:25 SuiseiNoboAz\n18:10-18:50 LOSTAGE\n19:40-20:20 TENDOUJI",
-    d2oka: "10:50-11:20 田山ショーゴ (BAND SET)\n12:10-12:40 クリトリック・リス\n13:30-14:00 Gateballsers\n14:50-15:20 テレビ大陸音頭\n16:10-16:40 ベランダ\n17:30-18:05 Soft Pine\n18:55-19:35 和久井沙良"
+    d1saka: "7:00 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 チーナ リハーサル\n10:20-10:30 DJチェック・会場なおし\n10:30-11:35 DJ yusk/minisky\n11:35-12:15 チーナ\n12:15-12:55 DJ 星原喜一郎 (転換)\n12:55-13:35 浪漫革命\n13:35-14:10 DJ ヒサシtheKID (転換)\n14:10-14:50 DENIMS\n14:50-15:30 DJ KIKUCHI HIDEAKI (転換)\n15:30-16:10 TENDRE\n16:10-16:50 DJ KATE (転換)\n16:50-17:30 Homecomings\n17:30-18:10 DJ ヒサシtheKID (転換)\n18:10-18:50 saccharin\n18:50-19:35 DJ 星原喜一郎 (転換)\n19:35-20:20 んoon\n20:20-20:45 DJ yusk/minisky\n20:45 END 完全音止め\n21:00 END(撤収)",
+    d1oka: "7:00 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 Johnson KOGA リハ\n11:00-11:30 Johnson KOGA\n11:30-12:20 転換\n12:20-12:50 松澤在音\n12:50-13:35 転換\n13:35-14:05 Gingersamm\n14:05-14:55 転換\n14:55-15:25 SYAYOS\n15:25-16:15 転換\n16:15-16:45 mayu (band set)\n16:45-17:35 転換\n17:35-18:05 Nikoん\n18:05-18:55 転換\n18:55-19:30 ゴリラ祭ーズ",
+    d2saka: "7:30 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 Khaki リハーサル\n10:20-10:30 DJチェック・会場なおし\n10:30-11:25 DJ yusk/minisky\n11:25-12:05 Khaki\n12:05-12:45 DJ 片山翔太 (転換)\n12:45-13:25 トリプルファイヤー\n13:25-14:05 DJ ノロマトンマVC (転換)\n14:05-14:45 DYGL\n14:45-15:25 DJ YIYI (転換)\n15:25-16:05 YONA YONA WEEKENDERS\n16:05-16:45 DJ HAGA (転換)\n16:45-17:25 SuiseiNoboAz\n17:25-18:10 DJ yusk/minisky (転換)\n18:10-18:50 LOSTAGE\n18:50-19:40 DJ 片山翔太 (転換)\n19:40-20:20 TENDOUJI\n20:20-20:45 DJ yusk/minisky\n20:45 END 完全音止め\n21:00 END(撤収)",
+    d2oka: "7:30 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 田山ショーゴ リハ\n10:50-11:20 田山ショーゴ (BAND SET)\n11:20-12:10 転換(クリトリック・リス自由時間 音80%)\n12:10-12:40 クリトリック・リス\n12:40-13:30 転換\n13:30-14:00 Gateballsers\n14:00-14:50 転換\n14:50-15:20 テレビ大陸音頭\n15:20-16:10 転換\n16:10-16:40 ベランダ\n16:40-17:30 転換\n17:30-18:05 Soft Pine\n18:05-18:55 転換\n18:55-19:35 和久井沙良"
   },
-  shifts: { d1: '', d2: '' }
+  shifts: { d1: [], d2: [] } // [{s:'10:30', e:'13:00', name:'和真', loc:'坂下'}, ...]
 };
+const normShifts = sh => ({ d1: Array.isArray(sh&&sh.d1)?sh.d1:[], d2: Array.isArray(sh&&sh.d2)?sh.d2:[] });
 
 const uuid = () => crypto.randomUUID ? crypto.randomUUID() :
   'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c=='x'?r:(r&0x3|0x8)).toString(16)});
@@ -242,7 +243,8 @@ if (!S.staffDrinks) S.staffDrinks = [];
 const save = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){ toast('保存エラー: 容量不足の可能性'); } };
 
 let ui = { view:'register', cart:{}, devices:[], countInputs:{}, countResult:null, lastSyncAt:null, syncErr:false,
-  repDay:'today', histLimit:60, staffSel:null, stLoc:null, stDay:null, stProd:'all', binSel:null, ttDay:null };
+  repDay:'today', histLimit:60, staffSel:null, stLoc:null, stDay:null, stProd:'all', binSel:null,
+  ttDay:null, ttWantScroll:false, shiftPick:{}, shS:'', shE:'', shLoc:'' };
 
 function toast(msg){ const t=$id('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),2200); }
 
@@ -384,6 +386,7 @@ function upsertProductLocal(p, isNew){
 /* ================= 画面遷移 ================= */
 function go(v){
   ui.view = v;
+  if (v==='tt') ui.ttWantScroll = true; // 当日は現在時刻へ自動スクロール
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('act', b.dataset.v===v));
   render();
   window.scrollTo(0,0);
@@ -1242,42 +1245,197 @@ function renderStats(){
 function parseTT(txt){
   const pad = t => t && t.length===4 ? '0'+t : t;
   return (txt||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
-    const m = l.match(/^(\d{1,2}:\d{2})\s*[-〜~]\s*(\d{1,2}:\d{2})\s+(.+)$/);
-    return m ? {s:pad(m[1]), e:pad(m[2]), name:m[3]} : {s:'', e:'', name:l};
+    let m = l.match(/^(\d{1,2}:\d{2})\s*[-〜~]\s*(\d{1,2}:\d{2})\s+(.+)$/);
+    if (m) return {s:pad(m[1]), e:pad(m[2]), name:m[3]};
+    m = l.match(/^(\d{1,2}:\d{2})\s+(.+)$/); // 単発時刻(会場入り・END等)
+    if (m) return {s:pad(m[1]), e:'', name:m[2]};
+    return {s:'', e:'', name:l};
   });
 }
+const toMin = t => { if(!t) return null; const p=t.split(':'); return (+p[0])*60+(+p[1]); };
+const fromMin = m => `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
 function renderTT(){
   const el = $id('view-tt');
   const days = S.event.days||[];
   const today = localDay(nowIso());
   const day = ui.ttDay || (days.includes(today) ? today : days[0]);
   const di = Math.max(0, days.indexOf(day));
+  const dKey = di===0 ? 'd1' : 'd2';
   const isToday = day===today;
-  const now = (()=>{ const d=new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })();
-  const stage = (title, color, txt) => {
-    const acts = parseTT(txt);
-    return `<div class="card">
-      <b style="border-left:6px solid ${color}; padding-left:8px">${title}</b>
-      ${acts.length ? acts.map(a=>{
-        const live = isToday && a.s && a.s<=now && now<a.e;
-        return `<div class="listrow" style="${live?'background:#fdf6dd; border-radius:8px; padding-left:8px':''}">
-          <span class="sub" style="min-width:96px; font-variant-numeric:tabular-nums">${a.s?`${a.s} - ${a.e}`:''}</span>
-          <span class="grow"><b>${esc(a.name)}</b></span>
-          ${live?'<span class="tag" style="background:#c79400;color:#fff">LIVE</span>':''}</div>`;
-      }).join('') : '<div class="empty">未入力(⚙︎設定の管理者設定から)</div>'}
+  const nowD = new Date();
+  const nowMin = nowD.getHours()*60 + nowD.getMinutes();
+
+  const saka = parseTT(di===0 ? S.event.tt?.d1saka : S.event.tt?.d2saka).filter(a=>a.s);
+  const oka  = parseTT(di===0 ? S.event.tt?.d1oka  : S.event.tt?.d2oka ).filter(a=>a.s);
+  const shifts = normShifts(S.event.shifts)[dKey];
+
+  // 時間レンジ(タイテ・シフト・OPEN/ENDを全部含めて時間単位に丸める)
+  let lo = toMin(S.event.open||'10:30'), hi = toMin(S.event.end||'21:00');
+  for (const a of [...saka, ...oka]){ const s=toMin(a.s), e=toMin(a.e); lo=Math.min(lo,s); hi=Math.max(hi,e??s); }
+  for (const sh of shifts){ const s=toMin(sh.s), e=toMin(sh.e); if(s!=null){ lo=Math.min(lo,s); hi=Math.max(hi,e??s); } }
+  lo = Math.floor(lo/60)*60; hi = Math.ceil(hi/60)*60;
+  const PPM = 1.9, GUT = 34;
+  const H = (hi-lo)*PPM;
+  const y = m => (m-lo)*PPM;
+
+  const isSub = name => /^(DJ|転換|END|OPEN)|チェック|リハ|会場入り|サウンド/.test(name);
+  const actBg = di===0 ? '#a9c6ea' : '#f0b9c4'; // PDF準拠: 1日目=青 / 2日目=赤
+  const COLS = [[0,32.4],[33.8,32.4],[67.6,32.4]]; // [left%, width%]
+  const block = (a, col) => {
+    const s = toMin(a.s), e = toMin(a.e);
+    const hgt = e!=null && a.e ? Math.max(15,(e-s)*PPM-1) : 15;
+    const sub = isSub(a.name);
+    const live = isToday && a.e && s<=nowMin && nowMin<e;
+    return `<div style="position:absolute; top:${y(s)}px; left:${COLS[col][0]}%; width:${COLS[col][1]}%; height:${hgt}px;
+      background:${sub?'#eef1f6':actBg}; border-radius:4px; padding:1px 4px; overflow:hidden; box-sizing:border-box;
+      ${live?'outline:2px solid #d63333; z-index:3;':''}">
+      ${hgt>=28?`<div style="font-size:9px; color:#67718a; font-variant-numeric:tabular-nums">${a.s}${a.e?'-'+a.e:''}</div>`:''}
+      <div style="font-size:${sub?'9.5':'11'}px; font-weight:${sub?'400':'700'}; line-height:1.15; color:${sub?'#67718a':'#1c2330'}">${esc(a.name)}</div>
     </div>`;
   };
-  const shifts = di===0 ? S.event.shifts?.d1 : S.event.shifts?.d2;
+
+  // シフト: 同一時間帯・同一販売所はまとめ、重なりはレーン分割
+  const groups = {};
+  for (const sh of shifts){
+    if (!sh.s || !sh.e) continue;
+    const k = `${sh.s}|${sh.e}|${sh.loc||''}`;
+    (groups[k] = groups[k] || {s:sh.s, e:sh.e, loc:sh.loc, names:[]}).names.push(sh.name);
+  }
+  const gl = Object.values(groups).sort((a,b)=>toMin(a.s)-toMin(b.s) || toMin(a.e)-toMin(b.e));
+  const laneEnds = [];
+  for (const g of gl){
+    let li = laneEnds.findIndex(endT => endT <= toMin(g.s));
+    if (li < 0){ li = laneEnds.length; laneEnds.push(0); }
+    laneEnds[li] = toMin(g.e); g.lane = li;
+  }
+  const laneN = Math.max(1, laneEnds.length);
+  const shiftBlocks = gl.map(g=>{
+    const s=toMin(g.s), e=toMin(g.e);
+    const live = isToday && s<=nowMin && nowMin<e;
+    const c = g.loc==='坂上' ? ['var(--nonal-bg)','var(--nonal)'] : ['var(--soft-bg)','var(--soft)'];
+    const w = COLS[2][1]/laneN, left = COLS[2][0] + g.lane*w;
+    return `<div style="position:absolute; top:${y(s)}px; left:${left}%; width:${w-0.5}%; height:${Math.max(15,(e-s)*PPM-1)}px;
+      background:${c[0]}; border-left:3px solid ${c[1]}; border-radius:4px; padding:1px 3px; overflow:hidden; box-sizing:border-box;
+      ${live?'outline:2px solid #d63333; z-index:3;':''}">
+      <div style="font-size:9px; color:#67718a; font-variant-numeric:tabular-nums">${g.s}-${g.e}</div>
+      <div style="font-size:10.5px; font-weight:700; line-height:1.2">${g.names.map(esc).join('・')}</div>
+      <div style="font-size:9px; color:#67718a">${esc(g.loc||'')}</div>
+    </div>`;
+  }).join('');
+
+  // 時間目盛・OPEN/END・現在線
+  let grid = '';
+  for (let m=lo; m<=hi; m+=60){
+    grid += `<div style="position:absolute; top:${y(m)}px; left:0; right:0; border-top:1px solid #eef1f6"></div>
+      <div style="position:absolute; top:${y(m)+1}px; left:2px; font-size:9px; color:#898781; font-variant-numeric:tabular-nums">${fromMin(m)}</div>`;
+  }
+  for (const [t,label] of [[S.event.open,'OPEN'],[S.event.end,'END']]){
+    const m = toMin(t); if (m==null) continue;
+    grid += `<div style="position:absolute; top:${y(m)}px; left:0; right:0; border-top:1.5px dashed #b0b8c9; z-index:2">
+      <span style="position:absolute; left:2px; top:1px; font-size:9px; color:#67718a; font-weight:700; background:#fff">${label} ${esc(t)}</span></div>`;
+  }
+  const nowLine = (isToday && nowMin>=lo && nowMin<=hi) ? `
+    <div id="nowline" style="position:absolute; top:${y(nowMin)}px; left:0; right:0; border-top:2px solid #d63333; z-index:6">
+      <span style="position:absolute; right:4px; top:-9px; background:#d63333; color:#fff; font-size:10px; font-weight:700; padding:1px 7px; border-radius:99px">現在 ${fromMin(nowMin)}</span>
+    </div>` : '';
+
+  // 「今」のサマリー(演奏中/シフト中)
+  const nowIn = list => list.filter(a=>a.e && toMin(a.s)<=nowMin && nowMin<toMin(a.e)).map(a=>a.name);
+  const nowShift = gl.filter(g=>toMin(g.s)<=nowMin && nowMin<toMin(g.e)).map(g=>`${g.names.join('・')}(${g.loc||''})`);
+  const nowBanner = isToday ? `<div class="banner warn" style="border-color:#e9a0a0; background:#fdecec; color:#8f2020">
+    ▶ 坂: <b>${esc(nowIn(saka)[0]||'—')}</b> ／ 丘: <b>${esc(nowIn(oka)[0]||'—')}</b><br>
+    🍺 シフト中: <b>${nowShift.length?esc(nowShift.join(' / ')):'—'}</b></div>` : '';
+
   el.innerHTML = `
-    <h2>${esc(S.event.name||'イベント')} タイムテーブル</h2>
-    <div class="chips" style="margin-bottom:6px">
-      ${days.map(d=>`<button class="${day===d?'sel':''}" onclick="ui.ttDay='${d}';render()">${dayChipLabel(d)}</button>`).join('')}
+    <div class="toolbar">
+      <div class="chips" style="margin:0">${days.map(d=>`<button class="${day===d?'sel':''}" onclick="ui.ttDay='${d}';render()">${dayChipLabel(d)}</button>`).join('')}</div>
+      <button class="btn sm" style="margin-left:auto" onclick="openShiftEditor()">✎ シフトを編集</button>
     </div>
-    <div class="banner info">OPEN ${esc(S.event.open||'')} / END ${esc(S.event.end||'')}${isToday?' ・ 現在 '+now:''}</div>
-    ${stage('坂ステージ', '#e6c800', di===0?S.event.tt?.d1saka:S.event.tt?.d2saka)}
-    ${stage('丘の上ステージ', '#7ec24a', di===0?S.event.tt?.d1oka:S.event.tt?.d2oka)}
-    <h2>シフト表</h2>
-    <div class="card">${shifts ? `<div style="white-space:pre-line">${esc(shifts)}</div>` : '<div class="empty">未入力(⚙︎設定の管理者設定から)</div>'}</div>`;
+    ${nowBanner}
+    <div style="display:flex; margin-left:${GUT}px; gap:1.4%; margin-bottom:4px">
+      <b style="flex:1; font-size:12px; border-left:5px solid #e6c800; padding-left:6px">坂ステージ</b>
+      <b style="flex:1; font-size:12px; border-left:5px solid #7ec24a; padding-left:6px">丘の上ステージ</b>
+      <b style="flex:1; font-size:12px; border-left:5px solid var(--primary); padding-left:6px">シフト</b>
+    </div>
+    <div style="position:relative; height:${H}px; background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden">
+      ${grid}
+      <div style="position:absolute; left:${GUT}px; right:3px; top:0; bottom:0">
+        ${saka.map(a=>block(a,0)).join('')}
+        ${oka.map(a=>block(a,1)).join('')}
+        ${shiftBlocks}
+      </div>
+      ${nowLine}
+    </div>
+    <p class="sub">タイムテーブルの編集は⚙︎設定の管理者設定、シフトは上の「シフトを編集」から。</p>`;
+  if (ui.ttWantScroll){
+    ui.ttWantScroll = false;
+    if (isToday) setTimeout(()=>{ const n=$id('nowline'); if(n) n.scrollIntoView({block:'center'}); }, 60);
+  }
+}
+
+/* ---- シフト編集 ---- */
+function openShiftEditor(){
+  S.event.shifts = normShifts(S.event.shifts);
+  ui.shiftPick = {};
+  renderShiftEditor();
+  $id('modal').classList.add('open');
+}
+function renderShiftEditor(){
+  const days = S.event.days||[];
+  const today = localDay(nowIso());
+  const day = ui.ttDay || (days.includes(today) ? today : days[0]);
+  const di = Math.max(0, days.indexOf(day));
+  const dKey = di===0 ? 'd1' : 'd2';
+  const list = S.event.shifts[dKey].map((sh,i)=>({...sh,_i:i})).sort((a,b)=>(a.s||'').localeCompare(b.s||''));
+  const staffNames = S.staff.filter(s=>s.active).map(s=>s.name);
+  $id('mbox').innerHTML = `<div class="mhead"><b>シフトを編集(${di+1}日目)</b><button class="x" onclick="closeModal()">閉じる</button></div>
+    <label class="fld">スタッフを選ぶ(複数可)</label>
+    <div class="chips">${staffNames.length ? staffNames.map(n=>`
+      <button class="${ui.shiftPick[n]?'sel':''}" onclick="toggleShiftPick(decodeURIComponent('${encodeURIComponent(n)}'))">${esc(n)}</button>`).join('')
+      : '<span class="sub">先にスタッフタブで名簿を登録してください</span>'}</div>
+    <div class="row">
+      <div class="grow"><label class="fld">開始</label><input id="sh-s" type="time" value="${esc(ui.shS||S.event.open||'10:30')}"></div>
+      <div class="grow"><label class="fld">終了</label><input id="sh-e" type="time" value="${esc(ui.shE||'')}"></div>
+      <div class="grow"><label class="fld">販売所</label><select id="sh-loc">${LOCS.map(l=>`<option ${((ui.shLoc||S.cfg.loc)===l)?'selected':''}>${l}</option>`).join('')}</select></div>
+    </div>
+    <button class="btn primary" style="width:100%; margin-top:10px; padding:12px" onclick="addShifts()">＋ この時間で追加</button>
+    <h2>登録済み(${di+1}日目)</h2>
+    ${list.length ? list.map(sh=>`<div class="listrow">
+      <span class="sub" style="font-variant-numeric:tabular-nums">${esc(sh.s)}-${esc(sh.e)}</span>
+      <span class="grow"><b>${esc(sh.name)}</b> <span class="tag">${esc(sh.loc||'')}</span></span>
+      <button class="btn sm danger" onclick="delShift(${sh._i})">削除</button></div>`).join('')
+      : '<div class="empty">まだありません</div>'}`;
+}
+function toggleShiftPick(name){
+  ui.shS = $id('sh-s').value; ui.shE = $id('sh-e').value; ui.shLoc = $id('sh-loc').value;
+  ui.shiftPick[name] = !ui.shiftPick[name];
+  renderShiftEditor();
+}
+function pushEventConfig(){
+  S.outbox.push({op:'upsert', table:'event_config', row:{id:1, data:S.event, updated_at:nowIso()}});
+  save(); syncTick();
+}
+function addShifts(){
+  const days = S.event.days||[]; const today = localDay(nowIso());
+  const day = ui.ttDay || (days.includes(today) ? today : days[0]);
+  const dKey = Math.max(0, days.indexOf(day))===0 ? 'd1' : 'd2';
+  const s = $id('sh-s').value, e = $id('sh-e').value, loc = $id('sh-loc').value;
+  const names = Object.keys(ui.shiftPick).filter(n=>ui.shiftPick[n]);
+  if (!names.length){ toast('スタッフを選んでください'); return; }
+  if (!s || !e || toMin(e)<=toMin(s)){ toast('時間を確認してください(終了は開始より後)'); return; }
+  for (const name of names) S.event.shifts[dKey].push({s, e, name, loc});
+  pushEventConfig();
+  ui.shiftPick = {}; ui.shS = e; ui.shE = ''; ui.shLoc = loc; // 次の枠の開始=今回の終了
+  renderShiftEditor(); render(); toast(`${names.length}人分のシフトを追加しました`);
+}
+function delShift(idx){
+  const days = S.event.days||[]; const today = localDay(nowIso());
+  const day = ui.ttDay || (days.includes(today) ? today : days[0]);
+  const dKey = Math.max(0, days.indexOf(day))===0 ? 'd1' : 'd2';
+  ui.shS = $id('sh-s').value; ui.shE = $id('sh-e').value; ui.shLoc = $id('sh-loc').value;
+  S.event.shifts[dKey].splice(idx, 1);
+  pushEventConfig();
+  renderShiftEditor(); render();
 }
 
 /* ================= 設定 ================= */
@@ -1331,10 +1489,7 @@ function renderSettings(){
       <textarea id="ev-tt-d2saka" rows="6">${esc(ev.tt?.d2saka||'')}</textarea>
       <label class="fld">タイムテーブル 2日目・丘の上ステージ</label>
       <textarea id="ev-tt-d2oka" rows="6">${esc(ev.tt?.d2oka||'')}</textarea>
-      <label class="fld">シフト表 1日目(自由記入)</label>
-      <textarea id="ev-sh-d1" rows="4" placeholder="例: 10:00-14:00 坂下: 和真・○○">${esc(ev.shifts?.d1||'')}</textarea>
-      <label class="fld">シフト表 2日目(自由記入)</label>
-      <textarea id="ev-sh-d2" rows="4">${esc(ev.shifts?.d2||'')}</textarea>
+      <p class="sub">「HH:MM-HH:MM 名前」で1行1枠。「HH:MM 名前」だけなら単発マーク(会場入り・END等)。DJ/転換/リハ/チェックを含む行は薄色で表示されます。シフトはタイテ画面の「シフトを編集」から。</p>
       <button class="btn primary" style="width:100%; margin-top:12px; padding:14px" onclick="saveEvent()">管理者設定を保存(全端末に反映)</button>
     </div>
     <h2>メンテナンス</h2>
@@ -1377,7 +1532,7 @@ function saveEvent(){
     end: $id('ev-end').value || '21:00',
     tt: { d1saka:$id('ev-tt-d1saka').value, d1oka:$id('ev-tt-d1oka').value,
           d2saka:$id('ev-tt-d2saka').value, d2oka:$id('ev-tt-d2oka').value },
-    shifts: { d1:$id('ev-sh-d1').value, d2:$id('ev-sh-d2').value },
+    shifts: normShifts(S.event.shifts), // シフトはタイテ画面で編集(ここでは保持)
   };
   S.event = data;
   S.outbox.push({op:'upsert', table:'event_config', row:{id:1, data, updated_at:nowIso()}});
