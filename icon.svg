@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#15325b"/>
+  <!-- ジョッキ -->
+  <rect x="140" y="180" width="180" height="220" rx="24" fill="#f6c445"/>
+  <rect x="140" y="150" width="180" height="70" rx="24" fill="#ffffff"/>
+  <circle cx="180" cy="150" r="34" fill="#ffffff"/>
+  <circle cx="240" cy="138" r="40" fill="#ffffff"/>
+  <circle cx="296" cy="152" r="32" fill="#ffffff"/>
+  <path d="M320 220h34a40 40 0 0 1 40 40v60a40 40 0 0 1-40 40h-34v-36h30a10 10 0 0 0 10-10v-48a10 10 0 0 0-10-10h-30z" fill="#f6c445"/>
+  <rect x="164" y="240" width="24" height="130" rx="12" fill="#e0a416"/>
+  <rect x="218" y="240" width="24" height="130" rx="12" fill="#e0a416"/>
+  <rect x="272" y="240" width="24" height="130" rx="12" fill="#e0a416"/>
+</svg>

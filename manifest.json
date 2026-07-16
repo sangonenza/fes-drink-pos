@@ -1,0 +1,13 @@
+{
+  "name": "ドリンクPOS",
+  "short_name": "ドリンクPOS",
+  "description": "ロックフェス ドリンク会計・在庫管理",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f4f8",
+  "theme_color": "#15325b",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
