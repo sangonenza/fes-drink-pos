@@ -347,7 +347,7 @@ function renderRegister(){
       const q = ui.cart[p.id]||0;
       html += `<button class="prod cat-${cat} ${q?'sel':''}" ${soldout?'disabled':''} onclick="tapProd('${p.id}')">
         <span class="pname">${esc(p.name)}</span><span class="pprice">${yen(p.price)}</span>
-        <span class="pstock ${low?'low':''}">${soldout?'売切':(cat==='draft'?`残≈${s}杯`:`残${s}`)}</span>
+        ${cat==='draft'?'':`<span class="pstock ${low?'low':''}">${soldout?'売切':`残${s}`}</span>`}
         ${q?`<span class="psel">${q}</span>`:''}</button>`;
     }
     html += '</div>';
@@ -549,8 +549,8 @@ function renderStock(){
     <div class="card">${prods.length ? prods.map(p=>{
       const s = st[p.id]||0; const low = s<=S.cfg.threshold;
       return `<div class="listrow"><span class="catdot ${p.category}"></span>
-        <span class="grow"><b>${esc(p.name)}</b>${p.category==='draft'?'<br><span class="sub">杯数は目安</span>':''}</span>
-        <span class="stocknum ${low?'low':''}">${s}${p.category==='draft'?'杯':''}</span>
+        <span class="grow"><b>${esc(p.name)}</b>${p.category==='draft'?'<br><span class="sub">使い捨てカップ数で管理</span>':''}</span>
+        <span class="stocknum ${low?'low':''}">${s}${p.category==='draft'?'<span style="font-size:12px">カップ</span>':''}</span>
         <button class="btn sm" onclick="openRestock('${p.id}')">＋補充</button>
         <button class="btn sm" onclick="openLoss('${p.id}')">−ロス</button></div>`;
     }).join('') : '<div class="empty">商品がありません</div>'}</div>
@@ -567,13 +567,11 @@ function openRestock(pid){
   const p = prodById(pid);
   const box = $id('mbox');
   if (p.category==='draft'){
-    box.innerHTML = `<div class="mhead"><b>${esc(p.name)} — 樽の追加</b><button class="x" onclick="closeModal()">閉じる</button></div>
-      <div class="row"><div class="grow"><label class="fld">樽容量(L)</label><input id="f-keg" type="number" inputmode="decimal" value="10"></div>
-      <div class="grow"><label class="fld">1杯(ml)</label><input id="f-cup" type="number" inputmode="numeric" value="400"></div></div>
-      <label class="fld">追加する杯数(換算目安・手修正可)</label><input id="f-qty" type="number" inputmode="numeric" value="25">
-      <div class="row" style="margin-top:8px"><button class="btn sm" onclick="calcKeg()">容量から再計算</button></div>
+    box.innerHTML = `<div class="mhead"><b>${esc(p.name)} — カップの追加</b><button class="x" onclick="closeModal()">閉じる</button></div>
+      <p class="sub">使い捨てカップの数を数えて入力してください。締めの棚卸しで残カップ数を数えると、記録上の販売数との差異が出ます。</p>
+      <label class="fld">カップ数</label><input id="f-qty" type="number" inputmode="numeric" placeholder="例: 200">
       <label class="fld">種別</label>
-      <select id="f-type"><option value="restock">補充(樽交換)</option><option value="initial">初期搬入</option></select>
+      <select id="f-type"><option value="initial">初期搬入(開始時のカップ数)</option><option value="restock">補充(追加分)</option></select>
       <button class="btn primary" style="width:100%; margin-top:16px; padding:14px" onclick="doRestock('${pid}')">記録する</button>`;
   } else {
     box.innerHTML = `<div class="mhead"><b>${esc(p.name)} — 在庫追加</b><button class="x" onclick="closeModal()">閉じる</button></div>
@@ -592,10 +590,6 @@ function openRestock(pid){
 function calcCase(){
   const n = (parseInt($id('f-per').value,10)||0)*(parseInt($id('f-case').value,10)||0) + (parseInt($id('f-bara').value,10)||0);
   $id('f-sum').textContent = n + '本';
-}
-function calcKeg(){
-  const keg = parseFloat($id('f-keg').value)||0, cup = parseInt($id('f-cup').value,10)||1;
-  $id('f-qty').value = Math.floor(keg*1000/cup);
 }
 function doRestock(pid){
   const p = prodById(pid);
@@ -630,7 +624,7 @@ function doLoss(pid){
 /* ================= ⑤ 棚卸し ================= */
 function renderCount(){
   const el = $id('view-count');
-  const prods = activeProducts().filter(p=>p.category!=='draft'); // 生ビールは対象外(目安管理)
+  const prods = activeProducts(); // 生ビールも対象(残りの使い捨てカップ数を数える)
   const others = ui.devices.filter(d=>d.id!==S.cfg.deviceId && d.pending>0);
   let warn = '';
   if (S.outbox.length) warn += `<div class="banner warn">⚠️ この端末に未送信の記録が${S.outbox.length}件あります。同期を待ってから数えてください。</div>`;
@@ -656,12 +650,12 @@ function renderCount(){
   el.innerHTML = `
     <div class="toolbar"><button class="btn" onclick="go('stock')">← 在庫へ戻る</button></div>
     ${warn}
-    <h2>棚卸し — 実際に数えた本数を入力</h2>
-    <p class="sub">数え終わるまで理論在庫は表示されません(思い込み防止)。生ビールは対象外です。</p>
+    <h2>棚卸し — 実際に数えた数を入力</h2>
+    <p class="sub">数え終わるまで理論在庫は表示されません(思い込み防止)。生ビールは残りの使い捨てカップ数を数えてください。</p>
     <div class="card">${prods.length ? prods.map(p=>`
       <div class="listrow"><span class="catdot ${p.category}"></span>
-        <span class="grow">${esc(p.name)}</span>
-        <input style="width:110px; text-align:right; font-size:20px" type="number" inputmode="numeric" placeholder="本数"
+        <span class="grow">${esc(p.name)}${p.category==='draft'?'<br><span class="sub">残りカップ数</span>':''}</span>
+        <input style="width:110px; text-align:right; font-size:20px" type="number" inputmode="numeric" placeholder="${p.category==='draft'?'カップ':'本数'}"
           value="${ui.countInputs[p.id]??''}" onchange="ui.countInputs['${p.id}']=this.value"></div>`).join('')
       : '<div class="empty">対象商品がありません</div>'}</div>
     <button class="btn primary" style="width:100%; padding:14px" onclick="showDiff()">差異を確認</button>`;
@@ -671,7 +665,7 @@ function showDiff(){
   document.querySelectorAll('#view-count input[type=number]').forEach(inp=>inp.dispatchEvent(new Event('change')));
   const st = stockMap();
   const rows = [];
-  for (const p of activeProducts().filter(p=>p.category!=='draft')){
+  for (const p of activeProducts()){
     const v = ui.countInputs[p.id];
     if (v===undefined || v==='') continue;
     const counted = parseInt(v,10)||0;
