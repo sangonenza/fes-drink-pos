@@ -852,7 +852,7 @@ function renderReport(){
       ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="setRepLoc('${l}')">${l}</button>`).join('')}
     </div>
     <div class="chips" style="margin-bottom:10px">
-      <button class="${ui.repDay==='today'?'sel':''}" onclick="setRepDay('today')">本日</button>
+      <button class="${ui.repDay==='today'?'sel':''}" onclick="setRepDay('today')">本日${(S.event.days||[]).includes(today)?`(${S.event.days.indexOf(today)+1}日目)`:''}</button>
       ${days.filter(d=>d!==today).map(d=>`<button class="${ui.repDay===d?'sel':''}" onclick="setRepDay('${d}')">${dayChipLabel(d)}</button>`).join('')}
       <button class="${ui.repDay==='all'?'sel':''}" onclick="setRepDay('all')">全期間</button>
     </div>
