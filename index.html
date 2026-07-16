@@ -12,6 +12,7 @@
 <style>
 :root{
   --soft:#1e78d7; --soft-bg:#e8f2fc;
+  --nonal:#0f9d7a; --nonal-bg:#e5f6f0;
   --can:#e07020;  --can-bg:#fdf0e4;
   --draft:#c79400; --draft-bg:#fdf6dd;
   --ink:#1c2330; --sub:#67718a; --line:#dde3ee;
@@ -71,6 +72,7 @@ main{max-width:760px; margin:0 auto; padding:12px 12px 24px}
 .prod .pstock.low{background:#fdeaea; color:var(--ng); font-weight:700}
 .prod .psel{position:absolute; bottom:8px; right:8px; min-width:24px; height:24px; border-radius:99px; background:var(--primary); color:#fff; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; padding:0 6px}
 .prod.cat-soft{border-left-color:var(--soft); background:var(--soft-bg)}
+.prod.cat-nonal{border-left-color:var(--nonal); background:var(--nonal-bg)}
 .prod.cat-can{border-left-color:var(--can); background:var(--can-bg)}
 .prod.cat-draft{border-left-color:var(--draft); background:var(--draft-bg)}
 .prod.sel{outline:3px solid var(--primary); outline-offset:-1px}
@@ -121,7 +123,7 @@ main{max-width:760px; margin:0 auto; padding:12px 12px 24px}
 .listrow{display:flex; align-items:center; gap:10px; padding:11px 2px; border-bottom:1px solid var(--line)}
 .listrow:last-child{border-bottom:none}
 .catdot{width:10px; height:10px; border-radius:99px; flex:none}
-.catdot.soft{background:var(--soft)} .catdot.can{background:var(--can)} .catdot.draft{background:var(--draft)}
+.catdot.soft{background:var(--soft)} .catdot.nonal{background:var(--nonal)} .catdot.can{background:var(--can)} .catdot.draft{background:var(--draft)}
 .stocknum{font-size:20px; font-weight:800; min-width:70px; text-align:right}
 .stocknum.low{color:var(--ng)}
 .tag{font-size:11px; padding:2px 8px; border-radius:99px; background:#eef1f6; color:var(--sub); flex:none}
@@ -190,7 +192,7 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
 'use strict';
 /* ================= 基盤 ================= */
 const LS_KEY = 'fespos.v1';
-const CATS = { soft:'ソフトドリンク・ノンアル', can:'缶のお酒', draft:'生ビール' };
+const CATS = { soft:'ソフトドリンク', nonal:'ノンアルコール', can:'缶のお酒', draft:'生ビール' };
 const EV_TYPES = { initial:'初期搬入', restock:'補充', loss:'ロス', adjust:'棚卸し調整' };
 
 const uuid = () => crypto.randomUUID ? crypto.randomUUID() :
@@ -334,7 +336,7 @@ function renderRegister(){
   if (!prods.length){ el.innerHTML = `<div class="empty">商品が未登録です。<br>下の「商品」タブから登録してください。</div>`; return; }
   const st = stockMap();
   let html = '';
-  for (const cat of ['soft','can','draft']){
+  for (const cat of ['soft','nonal','can','draft']){
     const list = prods.filter(p=>p.category===cat);
     if (!list.length) continue;
     html += `<div class="cathead">${CATS[cat]}</div><div class="grid">`;
