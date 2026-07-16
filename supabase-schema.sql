@@ -56,6 +56,35 @@ create table devices (
   last_seen timestamptz not null default now()
 );
 
+-- スタッフ名簿
+create table staff (
+  id uuid primary key,
+  name text not null,
+  active boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+-- スタッフが在庫から飲んだ記録(1レコード=1本。売上ではない)
+create table staff_drinks (
+  id uuid primary key,
+  staff_id uuid not null references staff(id),
+  staff_name text not null,
+  product_id uuid not null references products(id),
+  product_name text not null,
+  location text,
+  device text,
+  cancelled boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 開催情報(開催日・OPEN/END・タイムテーブル・シフト)。1行のみ、上書き更新
+create table event_config (
+  id integer primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
 -- 更新時に updated_at を自動更新(取消の同期検知に必要)
 create or replace function touch_updated_at() returns trigger as $$
 begin
@@ -67,6 +96,12 @@ create trigger products_touch before update on products
   for each row execute function touch_updated_at();
 create trigger sales_touch before update on sales
   for each row execute function touch_updated_at();
+create trigger staff_touch before update on staff
+  for each row execute function touch_updated_at();
+create trigger staff_drinks_touch before update on staff_drinks
+  for each row execute function touch_updated_at();
+create trigger event_config_touch before update on event_config
+  for each row execute function touch_updated_at();
 
 -- RLS: 1日イベントの簡易運用として anon キーに全権限を与える。
 -- URL と anon キーの組が実質のパスワードなので、共有リンクを部外者に渡さないこと。
@@ -75,12 +110,18 @@ alter table stock_events enable row level security;
 alter table sales enable row level security;
 alter table cash_counts enable row level security;
 alter table devices enable row level security;
+alter table staff enable row level security;
+alter table staff_drinks enable row level security;
+alter table event_config enable row level security;
 
 create policy anon_all on products for all using (true) with check (true);
 create policy anon_all on stock_events for all using (true) with check (true);
 create policy anon_all on sales for all using (true) with check (true);
 create policy anon_all on cash_counts for all using (true) with check (true);
 create policy anon_all on devices for all using (true) with check (true);
+create policy anon_all on staff for all using (true) with check (true);
+create policy anon_all on staff_drinks for all using (true) with check (true);
+create policy anon_all on event_config for all using (true) with check (true);
 
 -- 【既存DBの移行用】上のcreate tableを旧版で実行済みの場合のみ、必要な行を実行する:
 -- v1.4 カテゴリ4分類化:
@@ -90,3 +131,7 @@ create policy anon_all on devices for all using (true) with check (true);
 --   alter table products add column location text not null default '坂下';
 --   alter table sales add column location text;
 --   alter table cash_counts add column location text;
+-- v2.0 スタッフドリンク・開催情報:
+--   上の create table staff / staff_drinks / event_config と
+--   対応する create trigger 3本・alter table〜enable row level security 3本・
+--   create policy anon_all 3本をそのまま実行する

@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#15325b">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
-<title>ドリンクPOS</title>
+<title>BAITEN</title>
 <style>
 :root{
   --soft:#1e78d7; --soft-bg:#e8f2fc;
@@ -157,7 +157,7 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
 <body>
 
 <header>
-  <span class="ttl">🍻 ドリンクPOS</span>
+  <span class="ttl">🍻 BAITEN</span>
   <span id="locb" style="font-size:12px; background:#ffffff2b; padding:3px 9px; border-radius:99px"></span>
   <span id="chip">…</span>
   <button id="gear" onclick="go('settings')">⚙︎</button>
@@ -170,6 +170,9 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
   <div id="view-report" class="view"></div>
   <div id="view-count" class="view"></div>
   <div id="view-cash" class="view"></div>
+  <div id="view-staff" class="view"></div>
+  <div id="view-stats" class="view"></div>
+  <div id="view-tt" class="view"></div>
   <div id="view-settings" class="view"></div>
 </main>
 
@@ -177,9 +180,10 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
 
 <nav>
   <button data-v="register" onclick="go('register')"><span class="ico">🧾</span>レジ</button>
-  <button data-v="products" onclick="go('products')"><span class="ico">🏷️</span>商品</button>
   <button data-v="stock" onclick="go('stock')"><span class="ico">📦</span>在庫</button>
+  <button data-v="staff" onclick="go('staff')"><span class="ico">🍺</span>スタッフ</button>
   <button data-v="report" onclick="go('report')"><span class="ico">📊</span>集計</button>
+  <button data-v="tt" onclick="go('tt')"><span class="ico">🎤</span>タイテ</button>
 </nav>
 
 <div id="modal"><div class="box" id="mbox"></div></div>
@@ -200,6 +204,19 @@ const LOCS = ['坂下','坂上']; // 販売所。商品は販売所に属する(
 const EV_TYPES = { initial:'初期搬入', restock:'補充', loss:'ロス', adjust:'棚卸し調整' };
 const DENOMS = [10000, 5000, 1000, 500, 100, 50, 10]; // 釣り銭準備金の金種
 const denomName = d => d>=1000 ? `${d.toLocaleString()}円札` : `${d}円玉`;
+// 開催情報の既定値(GFB'26)。管理者設定で編集するとクラウド経由で全端末に配布される
+const DEFAULT_EVENT = {
+  name: "GFB'26",
+  days: ['2026-07-18','2026-07-19'],
+  open: '10:30', end: '21:00',
+  tt: {
+    d1saka: "11:35-12:15 チーナ\n12:55-13:35 浪漫革命\n14:10-14:50 DENIMS\n15:30-16:10 TENDRE\n16:50-17:30 Homecomings\n18:10-18:50 saccharin\n19:35-20:20 んoon",
+    d1oka: "11:00-11:30 Johnson KOGA\n12:20-12:50 松澤在音\n13:35-14:05 Gingersamm\n14:55-15:25 SYAYOS\n16:15-16:45 mayu (band set)\n17:35-18:05 Nikoん\n18:55-19:30 ゴリラ祭ーズ",
+    d2saka: "11:25-12:05 Khaki\n12:45-13:25 トリプルファイヤー\n14:05-14:45 DYGL\n15:25-16:05 YONA YONA WEEKENDERS\n16:45-17:25 SuiseiNoboAz\n18:10-18:50 LOSTAGE\n19:40-20:20 TENDOUJI",
+    d2oka: "10:50-11:20 田山ショーゴ (BAND SET)\n12:10-12:40 クリトリック・リス\n13:30-14:00 Gateballsers\n14:50-15:20 テレビ大陸音頭\n16:10-16:40 ベランダ\n17:30-18:05 Soft Pine\n18:55-19:35 和久井沙良"
+  },
+  shifts: { d1: '', d2: '' }
+};
 
 const uuid = () => crypto.randomUUID ? crypto.randomUUID() :
   'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c=='x'?r:(r&0x3|0x8)).toString(16)});
@@ -213,15 +230,19 @@ const dayLabel = k => { const p=k.split('-'); return `${Number(p[1])}/${Number(p
 const $id = id => document.getElementById(id);
 
 let S = {
-  products:[], events:[], sales:[], cash:[],
-  outbox:[], pulls:{},
+  products:[], events:[], sales:[], cash:[], staff:[], staffDrinks:[],
+  outbox:[], pulls:{}, event: DEFAULT_EVENT,
   cfg:{ deviceId:uuid(), device:'レジ1', url:'', key:'', pass:'', threshold:10 },
 };
 try { const raw = localStorage.getItem(LS_KEY); if (raw) S = Object.assign(S, JSON.parse(raw)); } catch(e){}
 if (!S.cfg.loc) S.cfg.loc = LOCS[0];
+if (!S.event) S.event = DEFAULT_EVENT;
+if (!S.staff) S.staff = [];
+if (!S.staffDrinks) S.staffDrinks = [];
 const save = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){ toast('保存エラー: 容量不足の可能性'); } };
 
-let ui = { view:'register', cart:{}, devices:[], countInputs:{}, countResult:null, lastSyncAt:null, syncErr:false, repDay:'today' };
+let ui = { view:'register', cart:{}, devices:[], countInputs:{}, countResult:null, lastSyncAt:null, syncErr:false,
+  repDay:'today', histLimit:60, staffSel:null, stLoc:null, stDay:null, stProd:'all', binSel:null, ttDay:null };
 
 function toast(msg){ const t=$id('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),2200); }
 
@@ -231,6 +252,8 @@ function stockMap(){
   for (const e of S.events) m[e.product_id] = (m[e.product_id]||0) + e.qty_delta;
   for (const s of S.sales) if (s.status==='completed')
     for (const it of s.items) m[it.product_id] = (m[it.product_id]||0) - it.qty;
+  for (const d of S.staffDrinks) if (!d.cancelled)
+    m[d.product_id] = (m[d.product_id]||0) - 1;
   return m;
 }
 const prodById = id => S.products.find(p=>p.id===id);
@@ -256,6 +279,9 @@ async function pushOutbox(){
     if (op.op==='insert'){
       // 一意制約+ignore-duplicatesで再送しても二重登録されない(冪等)
       await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=ignore-duplicates'}, body:JSON.stringify([op.row]) });
+    } else if (op.op==='upsert'){
+      // event_config用: 上書き更新(LWW)
+      await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=merge-duplicates'}, body:JSON.stringify([op.row]) });
     } else {
       await sb(`${op.table}?id=eq.${op.id}`, { method:'PATCH', body:JSON.stringify(op.patch) });
     }
@@ -268,16 +294,31 @@ const PULLS = [
   { t:'sales', ts:'updated_at', arr:'sales' },
   { t:'cash_counts', ts:'created_at', arr:'cash' },
 ];
-async function pullAll(){
-  for (const p of PULLS){
-    const since = S.pulls[p.t] || '1970-01-01T00:00:00Z';
-    const rows = await sb(`${p.t}?select=*&${p.ts}=gte.${encodeURIComponent(since)}&order=${p.ts}.asc&limit=1000`, {method:'GET'});
-    for (const row of rows){
-      const arr = S[p.arr]; const i = arr.findIndex(x=>x.id===row.id);
-      if (i>=0) arr[i]=row; else arr.push(row);
-      if (!S.pulls[p.t] || row[p.ts] > S.pulls[p.t]) S.pulls[p.t] = row[p.ts];
-    }
+const PULLS_V2 = [ // v2.0で追加。テーブル未作成でも既存の同期を巻き込まない
+  { t:'staff', ts:'updated_at', arr:'staff' },
+  { t:'staff_drinks', ts:'updated_at', arr:'staffDrinks' },
+];
+async function pullTable(p){
+  const since = S.pulls[p.t] || '1970-01-01T00:00:00Z';
+  const rows = await sb(`${p.t}?select=*&${p.ts}=gte.${encodeURIComponent(since)}&order=${p.ts}.asc&limit=1000`, {method:'GET'});
+  for (const row of rows){
+    const arr = S[p.arr]; const i = arr.findIndex(x=>x.id===row.id);
+    if (i>=0) arr[i]=row; else arr.push(row);
+    if (!S.pulls[p.t] || row[p.ts] > S.pulls[p.t]) S.pulls[p.t] = row[p.ts];
   }
+}
+async function pullAll(){
+  for (const p of PULLS) await pullTable(p);
+  try {
+    for (const p of PULLS_V2) await pullTable(p);
+    // 開催情報(1行のみ・LWW)
+    const since = S.pulls['event_config'] || '1970-01-01T00:00:00Z';
+    const cfgs = await sb(`event_config?select=*&updated_at=gte.${encodeURIComponent(since)}&order=updated_at.asc`, {method:'GET'});
+    for (const row of cfgs){
+      S.event = row.data;
+      if (!S.pulls['event_config'] || row.updated_at > S.pulls['event_config']) S.pulls['event_config'] = row.updated_at;
+    }
+  } catch(e){ console.warn('v2テーブル未作成(マイグレーション待ち):', e.message); }
   ui.devices = await sb(`devices?select=*`, {method:'GET'});
   save();
 }
@@ -339,7 +380,8 @@ function render(){
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('act'));
   const el = $id('view-'+ui.view); el.classList.add('act');
   ({register:renderRegister, products:renderProducts, stock:renderStock, report:renderReport,
-    count:renderCount, cash:renderCash, settings:renderSettings})[ui.view]();
+    count:renderCount, cash:renderCash, settings:renderSettings,
+    staff:renderStaff, stats:renderStats, tt:renderTT})[ui.view]();
   renderCart();
 }
 
@@ -512,7 +554,7 @@ const catPrice = c => {
 };
 function applyCatPrices(){
   let n = 0;
-  for (const c of ['soft','nonal','can']){
+  for (const c of ['soft','nonal','can','draft']){
     const v = parseInt($id('cp-'+c).value,10);
     if (!(v>=0)) continue;
     for (const p of S.products.filter(p=>p.category===c && p.price!==v)){
@@ -529,11 +571,11 @@ function renderProducts(){
     <div class="toolbar"><button class="btn primary" onclick="editProd(null)">＋ 商品を追加</button></div>
     <div class="card">
       <b>ジャンル一律価格</b>
-      ${['soft','nonal','can'].map(c=>`
+      ${['soft','nonal','can','draft'].map(c=>`
         <div class="row" style="margin-top:8px"><span class="grow">${CATS[c]}</span>
           <input id="cp-${c}" type="number" inputmode="numeric" value="${catPrice(c)}" placeholder="未設定" style="width:110px; text-align:right"><span class="sub">円</span></div>`).join('')}
       <button class="btn primary sm" style="margin-top:12px" onclick="applyCatPrices()">一律価格を適用</button>
-      <p class="sub">各ジャンルの全商品(両販売所)に適用されます。生ビールだけは商品の編集から個別に設定。</p>
+      <p class="sub">各ジャンルの全商品(両販売所)に適用されます。生ビールは1種類のみなのでここが唯一の価格設定です。</p>
     </div>
     <div class="card">${act.length ? act.map((p,i)=>`
       <div class="listrow"><span class="catdot ${p.category}"></span>
@@ -558,7 +600,7 @@ function editProd(pid){
     <label class="fld">販売所</label>
     <select id="f-loc">${LOCS.map(l=>`<option value="${l}" ${(p?locOf(p):S.cfg.loc)===l?'selected':''}>${l}</option>`).join('')}</select>
     <label class="fld">価格(円)</label><input id="f-price" type="number" inputmode="numeric" value="${p?p.price:''}" placeholder="例: 500">
-    <p class="sub">生ビール以外はジャンル一律価格 — 保存すると同ジャンルの全商品に適用されます</p>
+    <p class="sub">価格はジャンル一律 — 保存すると同ジャンルの全商品に適用されます</p>
     <button class="btn primary" style="width:100%; margin-top:16px; padding:14px" onclick="saveProd('${pid||''}')">保存</button>
     ${p?`<button class="btn danger" style="width:100%; margin-top:8px" onclick="hideProd('${pid}')">この商品を非表示にする</button>`:''}`;
   $id('modal').classList.add('open');
@@ -581,11 +623,9 @@ function saveProd(pid){
     const maxOrd = Math.max(0, ...S.products.map(p=>p.sort_order));
     upsertProductLocal({ id:uuid(), name, category, location, price, sort_order:maxOrd+1, active:true, updated_at:nowIso() }, true);
   }
-  // ジャンル一律価格: 生ビール以外は同ジャンルの他商品にも同じ価格を適用
-  if (category!=='draft'){
-    for (const q of S.products.filter(q=>q.category===category && q.price!==price))
-      upsertProductLocal({...q, price, updated_at:nowIso()}, false);
-  }
+  // ジャンル一律価格: 同ジャンルの他商品にも同じ価格を適用
+  for (const q of S.products.filter(q=>q.category===category && q.price!==price))
+    upsertProductLocal({...q, price, updated_at:nowIso()}, false);
   closeModal(); render(); toast('保存しました');
 }
 function hideProd(pid){
@@ -611,7 +651,9 @@ function renderStock(){
   const st = stockMap();
   const prods = locProducts();
   el.innerHTML = `
-    <div class="toolbar"><button class="btn primary" onclick="go('count')">📋 棚卸しへ</button><span class="tag" style="margin-left:auto">${esc(S.cfg.loc)}の在庫</span></div>
+    <div class="toolbar"><button class="btn primary" onclick="go('count')">📋 棚卸しへ</button>
+      <button class="btn" onclick="go('products')">🏷 商品設定</button>
+      <span class="tag" style="margin-left:auto">${esc(S.cfg.loc)}の在庫</span></div>
     <div class="card">${prods.length ? prods.map(p=>{
       const s = st[p.id]||0; const low = s<=S.cfg.threshold;
       return `<div class="listrow"><span class="catdot ${p.category}"></span>
@@ -632,6 +674,10 @@ function renderStock(){
       for (const s of S.sales){
         if (s.status!=='completed' || s.location!==S.cfg.loc) continue;
         for (const it of s.items) moves.push({t:s.created_at, tag:'販売', name:it.name, d:-it.qty, reason:null});
+      }
+      for (const d of S.staffDrinks){
+        if (d.cancelled || d.location!==S.cfg.loc) continue;
+        moves.push({t:d.created_at, tag:'スタッフ', name:d.product_name, d:-1, reason:d.staff_name});
       }
       moves.sort((a,b)=>b.t.localeCompare(a.t));
       return moves.length ? moves.slice(0,40).map(m=>`
@@ -781,8 +827,8 @@ function renderReport(){
   const day = ui.repDay==='today' ? today : ui.repDay;
   const loc = ui.repLoc==null ? S.cfg.loc : ui.repLoc; // 既定は自販売所
   const st = salesStats(day==='all' ? 'all' : day, loc);
-  const dayName = day==='all' ? '全期間' : (day===today ? '本日' : dayLabel(day));
-  const days = [...new Set(S.sales.map(s=>localDay(s.created_at)))].sort();
+  const dayName = day==='all' ? '全期間' : (day===today ? '本日' : dayChipLabel(day));
+  const days = eventDaysAll();
   const byProd = {}; const byHour = {};
   for (const s of st.done){
     const h = new Date(s.created_at).getHours()+'時台';
@@ -799,14 +845,15 @@ function renderReport(){
   }
   const hist = [...S.sales].filter(s=>day==='all'||localDay(s.created_at)===day)
     .filter(s=>s.location===loc)
-    .sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,60);
+    .sort((a,b)=>b.created_at.localeCompare(a.created_at));
+  const histShown = hist.slice(0, ui.histLimit);
   el.innerHTML = `
     <div class="chips" style="margin-bottom:2px">
       ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="setRepLoc('${l}')">${l}</button>`).join('')}
     </div>
     <div class="chips" style="margin-bottom:10px">
       <button class="${ui.repDay==='today'?'sel':''}" onclick="setRepDay('today')">本日</button>
-      ${days.filter(d=>d!==today).map(d=>`<button class="${ui.repDay===d?'sel':''}" onclick="setRepDay('${d}')">${dayLabel(d)}</button>`).join('')}
+      ${days.filter(d=>d!==today).map(d=>`<button class="${ui.repDay===d?'sel':''}" onclick="setRepDay('${d}')">${dayChipLabel(d)}</button>`).join('')}
       <button class="${ui.repDay==='all'?'sel':''}" onclick="setRepDay('all')">全期間</button>
     </div>
     <div class="statgrid">
@@ -816,6 +863,7 @@ function renderReport(){
       <div class="stat"><div class="v">${st.items}点</div><div class="l">販売点数</div></div>
     </div>
     <div class="toolbar" style="margin-top:12px">
+      <button class="btn" onclick="ui.binSel=null; go('stats')">📈 統計</button>
       <button class="btn" onclick="go('cash')">💰 レジ点検へ</button>
       <button class="btn" onclick="csvSales()">CSV(明細)</button>
       <button class="btn" onclick="csvSummary()">CSV(集計)</button>
@@ -830,8 +878,8 @@ function renderReport(){
     </table><br><table class="rep"><tr><th>時間帯</th><th>数</th><th>金額</th></tr>
       ${Object.entries(byHour).map(([h,v])=>`<tr><td>${h}</td><td>${v.n}</td><td>${yen(v.amt)}</td></tr>`).join('')}
     </table></div>
-    <h2>会計履歴(直近60件)</h2>
-    <div class="card">${hist.length ? hist.map((s,i)=>{
+    <h2>会計履歴(${hist.length}件)</h2>
+    <div class="card">${histShown.length ? histShown.map((s,i)=>{
       // 打ち直し・二度打ちの発見用: 直後(履歴上は次行)の会計と内容が同じで30秒以内なら警告
       const sig = x => x.items.map(it=>`${it.product_id}x${it.qty}`).sort().join();
       const prev = hist[i+1];
@@ -846,7 +894,8 @@ function renderReport(){
           <span class="sub">${s.payment==='cash'?'現金':'PayPay'} / ${esc(s.location||'')} ${esc(s.device||'')}</span></span>
         <b>${yen(s.total)}</b>
         ${s.status==='completed' ? `<button class="btn sm danger" onclick="cancelSale('${s.id}')">取消</button>` : '<span class="tag">取消済</span>'}
-      </div>`}).join('') : '<div class="empty">まだ会計がありません</div>'}</div>`;
+      </div>`}).join('') : '<div class="empty">まだ会計がありません</div>'}
+    ${hist.length>ui.histLimit ? `<button class="btn" style="width:100%; margin-top:8px" onclick="ui.histLimit+=100; render()">もっと見る(残り${hist.length-ui.histLimit}件)</button>` : ''}</div>`;
 }
 function cancelSale(id){
   const s = S.sales.find(x=>x.id===id);
@@ -958,11 +1007,273 @@ function saveCashCount(cashSales){
   save(); render(); syncTick(); toast('点検を記録しました');
 }
 
+/* ================= スタッフドリンク ================= */
+function renderStaff(){
+  const el = $id('view-staff');
+  const act = S.staff.filter(s=>s.active);
+  const inact = S.staff.filter(s=>!s.active);
+  // 集計: 誰が何を何本
+  const agg = {};
+  for (const d of S.staffDrinks){
+    if (d.cancelled) continue;
+    agg[d.staff_id] = agg[d.staff_id] || { name:d.staff_name, total:0, items:{} };
+    agg[d.staff_id].total++;
+    agg[d.staff_id].items[d.product_name] = (agg[d.staff_id].items[d.product_name]||0) + 1;
+  }
+  const hist = [...S.staffDrinks].sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,30);
+  el.innerHTML = `
+    <div class="toolbar"><button class="btn primary" onclick="addStaffModal()">＋ スタッフを追加</button></div>
+    <h2>スタッフドリンク — 名前をタップ → 飲むものを選ぶ</h2>
+    <p class="sub">在庫から1本引き、誰が何を飲んだか記録されます(売上には入りません)。</p>
+    <div class="grid">${act.length ? act.map(s=>`
+      <button class="prod" style="min-height:60px" onclick="pickStaff('${s.id}')"><span class="pname">${esc(s.name)}</span>
+        <span class="pprice">${agg[s.id]?agg[s.id].total+'本':''}</span></button>`).join('')
+      : '<div class="empty">スタッフが未登録です</div>'}</div>
+    <h2>誰が何を飲んだか</h2>
+    <div class="card">${Object.keys(agg).length ? Object.values(agg).sort((a,b)=>b.total-a.total).map(a=>`
+      <div class="listrow"><span class="grow"><b>${esc(a.name)}</b><br>
+        <span class="sub">${Object.entries(a.items).map(([n,c])=>`${esc(n)}×${c}`).join(' ')}</span></span>
+        <b>${a.total}本</b></div>`).join('') : '<div class="empty">まだ記録がありません</div>'}</div>
+    <h2>記録履歴(直近30件)</h2>
+    <div class="card">${hist.length ? hist.map(d=>`
+      <div class="listrow ${d.cancelled?'cancelled':''}">
+        <span class="sub">${hhmmss(d.created_at)}</span>
+        <span class="grow">${esc(d.staff_name)} — ${esc(d.product_name)}</span>
+        ${d.cancelled ? '<span class="tag">取消済</span>' : `<button class="btn sm danger" onclick="cancelStaffDrink('${d.id}')">取消</button>`}
+      </div>`).join('') : '<div class="empty">まだ記録がありません</div>'}</div>
+    ${act.length?`<div class="toolbar" style="margin-top:8px"><button class="btn sm" onclick="hideStaffModal()">名簿の整理(非表示にする)</button></div>`:''}
+    ${inact.length?`<h2>非表示のスタッフ</h2><div class="card">${inact.map(s=>`
+      <div class="listrow"><span class="grow" style="opacity:.6">${esc(s.name)}</span>
+        <button class="btn sm" onclick="reviveStaff('${s.id}')">再表示</button></div>`).join('')}</div>`:''}`;
+}
+function addStaffModal(){
+  $id('mbox').innerHTML = `<div class="mhead"><b>スタッフを追加</b><button class="x" onclick="closeModal()">閉じる</button></div>
+    <label class="fld">名前</label><input id="f-sname" placeholder="例: 和真">
+    <button class="btn primary" style="width:100%; margin-top:16px; padding:14px" onclick="saveStaff()">追加</button>`;
+  $id('modal').classList.add('open');
+}
+function saveStaff(){
+  const name = $id('f-sname').value.trim();
+  if (!name){ toast('名前を入力してください'); return; }
+  const row = { id:uuid(), name, active:true, updated_at:nowIso() };
+  S.staff.push(row);
+  S.outbox.push({op:'insert', table:'staff', row});
+  save(); syncTick(); closeModal(); render(); toast(`${name} を追加しました`);
+}
+function hideStaffModal(){
+  $id('mbox').innerHTML = `<div class="mhead"><b>名簿の整理</b><button class="x" onclick="closeModal()">閉じる</button></div>
+    ${S.staff.filter(s=>s.active).map(s=>`
+      <div class="listrow"><span class="grow">${esc(s.name)}</span>
+        <button class="btn sm danger" onclick="hideStaff('${s.id}')">非表示</button></div>`).join('')}`;
+  $id('modal').classList.add('open');
+}
+function hideStaff(id){
+  const s = S.staff.find(x=>x.id===id);
+  s.active = false; s.updated_at = nowIso();
+  S.outbox.push({op:'update', table:'staff', id, patch:{active:false}});
+  save(); syncTick(); closeModal(); render();
+}
+function reviveStaff(id){
+  const s = S.staff.find(x=>x.id===id);
+  s.active = true; s.updated_at = nowIso();
+  S.outbox.push({op:'update', table:'staff', id, patch:{active:true}});
+  save(); syncTick(); render();
+}
+function pickStaff(id){
+  ui.staffSel = id;
+  const st = S.staff.find(x=>x.id===id);
+  const m = stockMap();
+  $id('mbox').innerHTML = `<div class="mhead"><b>${esc(st.name)} が飲むドリンク(1本)</b><button class="x" onclick="closeModal()">閉じる</button></div>
+    <div class="grid">${locProducts().map(p=>{
+      const s = m[p.id]||0; const out = s<=0 && p.category!=='draft';
+      return `<button class="prod cat-${p.category}" ${out?'disabled':''} onclick="staffDrink('${p.id}')">
+        <span class="pname">${esc(p.name)}</span>${p.category==='draft'?'':`<span class="pstock">残${s}</span>`}</button>`;
+    }).join('')}</div>`;
+  $id('modal').classList.add('open');
+}
+function staffDrink(pid){
+  const st = S.staff.find(x=>x.id===ui.staffSel);
+  const p = prodById(pid);
+  if (!confirm(`${st.name} に ${p.name} を1本でOK?\n在庫から1本引かれます。`)) return;
+  const row = { id:uuid(), staff_id:st.id, staff_name:st.name, product_id:pid, product_name:p.name,
+    location:S.cfg.loc, device:S.cfg.device, cancelled:false, created_at:nowIso(), updated_at:nowIso() };
+  S.staffDrinks.push(row);
+  S.outbox.push({op:'insert', table:'staff_drinks', row});
+  save(); syncTick(); closeModal(); render(); toast(`${st.name}: ${p.name} を記録しました`);
+}
+function cancelStaffDrink(id){
+  const d = S.staffDrinks.find(x=>x.id===id);
+  if (!d || !confirm(`${d.staff_name} の ${d.product_name} を取り消しますか?(在庫が戻ります)`)) return;
+  d.cancelled = true; d.updated_at = nowIso();
+  S.outbox.push({op:'update', table:'staff_drinks', id, patch:{cancelled:true}});
+  save(); syncTick(); render(); toast('取り消しました');
+}
+
+/* ================= 統計(グラフ) ================= */
+const PIE_COLORS = ['#2a78d6','#1baf7a','#eda100','#008300','#4a3aa7','#e34948','#e87ba4','#eb6834'];
+function eventDaysAll(){
+  return [...new Set([...(S.event.days||[]), ...S.sales.map(s=>localDay(s.created_at))])].sort();
+}
+function dayChipLabel(d){
+  const i = (S.event.days||[]).indexOf(d);
+  return i>=0 ? `${i+1}日目 ${dayLabel(d)}` : dayLabel(d);
+}
+function renderStats(){
+  const el = $id('view-stats');
+  const loc = ui.stLoc || S.cfg.loc;
+  const days = eventDaysAll();
+  const today = localDay(nowIso());
+  const day = ui.stDay || (days.includes(today) ? today : days[0]);
+  const sales = S.sales.filter(s=>s.status==='completed' && s.location===loc && localDay(s.created_at)===day);
+  const prods = activeProducts().filter(p=>locOf(p)===loc);
+
+  // 5分ビン(OPEN〜END)
+  const [oh,om] = (S.event.open||'10:30').split(':').map(Number);
+  const [eh,em] = (S.event.end||'21:00').split(':').map(Number);
+  const startMin = oh*60+om, endMin = eh*60+em;
+  const nBins = Math.max(1, Math.ceil((endMin-startMin)/5));
+  const bins = new Array(nBins).fill(0);
+  const byProd = {};
+  for (const s of sales){
+    const d = new Date(s.created_at);
+    const mm = d.getHours()*60 + d.getMinutes() - startMin;
+    for (const it of s.items){
+      byProd[it.product_id] = byProd[it.product_id] || { name:it.name, qty:0 };
+      byProd[it.product_id].qty += it.qty;
+      if (ui.stProd!=='all' && it.product_id!==ui.stProd) continue;
+      if (mm>=0 && mm<endMin-startMin) bins[Math.floor(mm/5)] += it.qty;
+    }
+  }
+  const shownTotal = bins.reduce((a,b)=>a+b,0);
+
+  // 棒グラフSVG(横スクロール)。単系列: series-1 blue
+  const BW=5, GAP=2, H=140, AXIS=22, LPAD=4;
+  const W = nBins*(BW+GAP)+LPAD*2;
+  const maxV = Math.max(...bins, 1);
+  let barsSvg = '';
+  for (let i=0;i<nBins;i++){
+    const h = bins[i] ? Math.max(3, Math.round(bins[i]/maxV*(H-10))) : 0;
+    const x = LPAD+i*(BW+GAP);
+    if (bins[i]) barsSvg += `<rect x="${x}" y="${H-h}" width="${BW}" height="${h}" rx="2" fill="${ui.binSel===i?'#15325b':'#2a78d6'}"/>`;
+    barsSvg += `<rect x="${x-1}" y="0" width="${BW+GAP}" height="${H}" fill="transparent" style="cursor:pointer" onclick="ui.binSel=${i};render()"/>`;
+  }
+  // 正時ごとの目盛(OPENが半端な時刻でも実際の時間位置に置く)
+  let ticks = '';
+  for (let m=Math.ceil(startMin/60)*60; m<=endMin; m+=60){
+    const x = LPAD + (m-startMin)/5*(BW+GAP);
+    ticks += `<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#e1e0d9" stroke-width="1"/>
+      <text x="${x+2}" y="${H+15}" font-size="10" fill="#898781" style="font-variant-numeric:tabular-nums">${m/60}:00</text>`;
+  }
+  const binLabel = ui.binSel!=null ? (()=>{
+    const m0 = startMin + ui.binSel*5;
+    const f = m => `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
+    return `${f(m0)}〜${f(m0+5)} : ${bins[ui.binSel]||0}本`;
+  })() : 'グラフをタップすると5分枠の本数を表示';
+
+  // 円グラフ(銘柄シェア・その日の全銘柄)
+  const pieEntries = prods.map((p,idx)=>({ name:p.name, qty:(byProd[p.id]||{}).qty||0, color:PIE_COLORS[idx%PIE_COLORS.length] }))
+    .filter(e=>e.qty>0);
+  const pieTotal = pieEntries.reduce((a,e)=>a+e.qty,0);
+  let pieSvg = '';
+  if (pieTotal>0){
+    if (pieEntries.length===1){
+      pieSvg = `<circle cx="90" cy="90" r="80" fill="${pieEntries[0].color}" stroke="#fff" stroke-width="2"/>`;
+    } else {
+      let ang = -Math.PI/2;
+      for (const e of pieEntries){
+        const a1 = ang + e.qty/pieTotal*2*Math.PI;
+        const x0=90+80*Math.cos(ang), y0=90+80*Math.sin(ang), x1=90+80*Math.cos(a1), y1=90+80*Math.sin(a1);
+        const lg = (a1-ang)>Math.PI?1:0;
+        pieSvg += `<path d="M90,90 L${x0.toFixed(1)},${y0.toFixed(1)} A80,80 0 ${lg} 1 ${x1.toFixed(1)},${y1.toFixed(1)} Z" fill="${e.color}" stroke="#fff" stroke-width="2"/>`;
+        ang = a1;
+      }
+    }
+  }
+  el.innerHTML = `
+    <div class="toolbar"><button class="btn" onclick="go('report')">← 集計へ戻る</button></div>
+    <div class="chips" style="margin-bottom:2px">
+      ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="ui.stLoc='${l}';ui.binSel=null;render()">${l}</button>`).join('')}
+    </div>
+    <div class="chips" style="margin-bottom:2px">
+      ${days.map(d=>`<button class="${day===d?'sel':''}" onclick="ui.stDay='${d}';ui.binSel=null;render()">${dayChipLabel(d)}</button>`).join('')}
+    </div>
+    <div class="chips" style="margin-bottom:10px">
+      <button class="${ui.stProd==='all'?'sel':''}" onclick="ui.stProd='all';ui.binSel=null;render()">全体</button>
+      ${prods.map(p=>`<button class="${ui.stProd===p.id?'sel':''}" onclick="ui.stProd='${p.id}';ui.binSel=null;render()">${esc(p.name)}</button>`).join('')}
+    </div>
+    <h2>5分ごとの販売本数 — ${ui.stProd==='all'?'全体':esc((prodById(ui.stProd)||{}).name||'')}(${shownTotal}本)</h2>
+    <div class="card">
+      <div class="sub" style="margin-bottom:6px; font-variant-numeric:tabular-nums">${binLabel}</div>
+      <div style="overflow-x:auto"><svg width="${W}" height="${H+AXIS}" style="display:block">
+        ${ticks}
+        <line x1="0" y1="${H}" x2="${W}" y2="${H}" stroke="#c3c2b7" stroke-width="1"/>
+        ${barsSvg}
+      </svg></div>
+      <div class="sub right" style="font-variant-numeric:tabular-nums">最大 ${maxV}本/5分</div>
+    </div>
+    <h2>銘柄ごとの販売本数(${dayChipLabel(day)}・${esc(loc)})</h2>
+    <div class="card">
+      ${pieTotal ? `
+        <svg width="180" height="180" viewBox="0 0 180 180" style="display:block; margin:0 auto 10px">${pieSvg}</svg>
+        ${pieEntries.sort((a,b)=>b.qty-a.qty).map(e=>`
+          <div class="row" style="padding:5px 0">
+            <span style="width:12px;height:12px;border-radius:3px;background:${e.color};flex:none"></span>
+            <span class="grow">${esc(e.name)}</span>
+            <b style="font-variant-numeric:tabular-nums">${e.qty}本</b>
+            <span class="sub" style="min-width:44px; text-align:right; font-variant-numeric:tabular-nums">${Math.round(e.qty/pieTotal*100)}%</span>
+          </div>`).join('')}` : '<div class="empty">この日の売上がまだありません</div>'}
+    </div>`;
+}
+
+/* ================= タイムテーブル ================= */
+function parseTT(txt){
+  const pad = t => t && t.length===4 ? '0'+t : t;
+  return (txt||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const m = l.match(/^(\d{1,2}:\d{2})\s*[-〜~]\s*(\d{1,2}:\d{2})\s+(.+)$/);
+    return m ? {s:pad(m[1]), e:pad(m[2]), name:m[3]} : {s:'', e:'', name:l};
+  });
+}
+function renderTT(){
+  const el = $id('view-tt');
+  const days = S.event.days||[];
+  const today = localDay(nowIso());
+  const day = ui.ttDay || (days.includes(today) ? today : days[0]);
+  const di = Math.max(0, days.indexOf(day));
+  const isToday = day===today;
+  const now = (()=>{ const d=new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })();
+  const stage = (title, color, txt) => {
+    const acts = parseTT(txt);
+    return `<div class="card">
+      <b style="border-left:6px solid ${color}; padding-left:8px">${title}</b>
+      ${acts.length ? acts.map(a=>{
+        const live = isToday && a.s && a.s<=now && now<a.e;
+        return `<div class="listrow" style="${live?'background:#fdf6dd; border-radius:8px; padding-left:8px':''}">
+          <span class="sub" style="min-width:96px; font-variant-numeric:tabular-nums">${a.s?`${a.s} - ${a.e}`:''}</span>
+          <span class="grow"><b>${esc(a.name)}</b></span>
+          ${live?'<span class="tag" style="background:#c79400;color:#fff">LIVE</span>':''}</div>`;
+      }).join('') : '<div class="empty">未入力(⚙︎設定の管理者設定から)</div>'}
+    </div>`;
+  };
+  const shifts = di===0 ? S.event.shifts?.d1 : S.event.shifts?.d2;
+  el.innerHTML = `
+    <h2>${esc(S.event.name||'イベント')} タイムテーブル</h2>
+    <div class="chips" style="margin-bottom:6px">
+      ${days.map(d=>`<button class="${day===d?'sel':''}" onclick="ui.ttDay='${d}';render()">${dayChipLabel(d)}</button>`).join('')}
+    </div>
+    <div class="banner info">OPEN ${esc(S.event.open||'')} / END ${esc(S.event.end||'')}${isToday?' ・ 現在 '+now:''}</div>
+    ${stage('坂ステージ', '#e6c800', di===0?S.event.tt?.d1saka:S.event.tt?.d2saka)}
+    ${stage('丘の上ステージ', '#7ec24a', di===0?S.event.tt?.d1oka:S.event.tt?.d2oka)}
+    <h2>シフト表</h2>
+    <div class="card">${shifts ? `<div style="white-space:pre-line">${esc(shifts)}</div>` : '<div class="empty">未入力(⚙︎設定の管理者設定から)</div>'}</div>`;
+}
+
 /* ================= 設定 ================= */
 function renderSettings(){
   const el = $id('view-settings');
   const c = S.cfg;
+  const ev = S.event;
   el.innerHTML = `
+    <div class="toolbar"><button class="btn" onclick="go('products')">🏷 商品・価格設定を開く</button></div>
     <h2>この端末</h2>
     <div class="card">
       <label class="fld">販売所(この端末が担当する売り場)</label>
@@ -988,6 +1299,31 @@ function renderSettings(){
         <span class="sub">${hhmm(d.last_seen)}</span>
         ${d.pending>0?`<span class="tag" style="background:#fdeaea;color:var(--ng)">未送信${d.pending}</span>`:'<span class="tag">同期OK</span>'}</div>`).join('')
       : '<div class="sub">同期を設定すると各端末が表示されます</div>'}</div>
+    <h2>管理者設定(全端末共通)</h2>
+    <div class="card">
+      <label class="fld">イベント名</label><input id="ev-name" value="${esc(ev.name||'')}">
+      <div class="row">
+        <div class="grow"><label class="fld">開催 1日目</label><input id="ev-d1" type="date" value="${esc((ev.days||[])[0]||'')}"></div>
+        <div class="grow"><label class="fld">開催 2日目</label><input id="ev-d2" type="date" value="${esc((ev.days||[])[1]||'')}"></div>
+      </div>
+      <div class="row">
+        <div class="grow"><label class="fld">OPEN</label><input id="ev-open" type="time" value="${esc(ev.open||'')}"></div>
+        <div class="grow"><label class="fld">END</label><input id="ev-end" type="time" value="${esc(ev.end||'')}"></div>
+      </div>
+      <label class="fld">タイムテーブル 1日目・坂ステージ(1行 =「11:35-12:15 アーティスト」)</label>
+      <textarea id="ev-tt-d1saka" rows="6">${esc(ev.tt?.d1saka||'')}</textarea>
+      <label class="fld">タイムテーブル 1日目・丘の上ステージ</label>
+      <textarea id="ev-tt-d1oka" rows="6">${esc(ev.tt?.d1oka||'')}</textarea>
+      <label class="fld">タイムテーブル 2日目・坂ステージ</label>
+      <textarea id="ev-tt-d2saka" rows="6">${esc(ev.tt?.d2saka||'')}</textarea>
+      <label class="fld">タイムテーブル 2日目・丘の上ステージ</label>
+      <textarea id="ev-tt-d2oka" rows="6">${esc(ev.tt?.d2oka||'')}</textarea>
+      <label class="fld">シフト表 1日目(自由記入)</label>
+      <textarea id="ev-sh-d1" rows="4" placeholder="例: 10:00-14:00 坂下: 和真・○○">${esc(ev.shifts?.d1||'')}</textarea>
+      <label class="fld">シフト表 2日目(自由記入)</label>
+      <textarea id="ev-sh-d2" rows="4">${esc(ev.shifts?.d2||'')}</textarea>
+      <button class="btn primary" style="width:100%; margin-top:12px; padding:14px" onclick="saveEvent()">管理者設定を保存(全端末に反映)</button>
+    </div>
     <h2>メンテナンス</h2>
     <div class="card">
       <div class="toolbar">
@@ -1020,9 +1356,23 @@ function shareLink(){
   (navigator.clipboard ? navigator.clipboard.writeText(link).then(()=>toast('リンクをコピーしました'))
     : Promise.reject()).catch(()=>prompt('このリンクを他の端末に共有:', link));
 }
+function saveEvent(){
+  const data = {
+    name: $id('ev-name').value.trim(),
+    days: [$id('ev-d1').value, $id('ev-d2').value].filter(Boolean),
+    open: $id('ev-open').value || '10:30',
+    end: $id('ev-end').value || '21:00',
+    tt: { d1saka:$id('ev-tt-d1saka').value, d1oka:$id('ev-tt-d1oka').value,
+          d2saka:$id('ev-tt-d2saka').value, d2oka:$id('ev-tt-d2oka').value },
+    shifts: { d1:$id('ev-sh-d1').value, d2:$id('ev-sh-d2').value },
+  };
+  S.event = data;
+  S.outbox.push({op:'upsert', table:'event_config', row:{id:1, data, updated_at:nowIso()}});
+  save(); syncTick(); toast('管理者設定を保存しました');
+}
 async function repull(){
   if (S.outbox.length && !confirm(`未送信が${S.outbox.length}件あります。先に同期するのが安全です。続行しますか?`)) return;
-  S.pulls={}; S.products=[]; S.events=[]; S.sales=[]; S.cash=[];
+  S.pulls={}; S.products=[]; S.events=[]; S.sales=[]; S.cash=[]; S.staff=[]; S.staffDrinks=[];
   save(); toast('再取得中…'); await syncTick();
 }
 function wipe(){
