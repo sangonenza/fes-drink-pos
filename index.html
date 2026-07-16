@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#15325b">
@@ -25,7 +25,9 @@ html,body{margin:0; padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
   background:var(--bg); color:var(--ink); font-size:16px;
   padding-bottom:calc(64px + env(safe-area-inset-bottom));}
-button{font-family:inherit; font-size:inherit; border:none; border-radius:12px; cursor:pointer; color:var(--ink); background:#fff}
+/* touch-action:manipulation でダブルタップズームを抑止(連打対策)。選択・長押しメニューも無効化 */
+button{font-family:inherit; font-size:inherit; border:none; border-radius:12px; cursor:pointer; color:var(--ink); background:#fff;
+  touch-action:manipulation; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none}
 button:active{transform:scale(.98)}
 button:disabled{opacity:.45; cursor:default}
 input,select,textarea{font-family:inherit; font-size:16px; border:1px solid var(--line); border-radius:10px; padding:10px 12px; width:100%; background:#fff; color:var(--ink)}
