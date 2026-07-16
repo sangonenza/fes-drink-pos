@@ -341,7 +341,20 @@ async function syncTick(){
   renderChip();
   // 入力中の再描画はフォーカス喪失・入力消失を招くのでスキップ(次のtickで反映される)
   const ae = document.activeElement;
-  if (!ae || !['INPUT','TEXTAREA','SELECT'].includes(ae.tagName)) render();
+  if (!ae || !['INPUT','TEXTAREA','SELECT'].includes(ae.tagName)) renderPreservingForms();
+}
+// 同期tickの再描画で、明示保存(「適用」等)前の入力値が消えるのを防ぐ。
+// 画面内の全フォーム入力値を退避→render→復元。ナビゲーション(go)は素のrenderなので意図通りリセットされる。
+function renderPreservingForms(){
+  const keep = {};
+  document.querySelectorAll('main input, main textarea, main select').forEach(el=>{
+    if (el.id) keep[el.id] = el.type==='checkbox' ? el.checked : el.value;
+  });
+  render();
+  for (const id in keep){
+    const el = document.getElementById(id);
+    if (el){ if (el.type==='checkbox') el.checked = keep[id]; else el.value = keep[id]; }
+  }
 }
 function renderChip(){
   const c = $id('chip');
