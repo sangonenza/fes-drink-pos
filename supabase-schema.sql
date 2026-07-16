@@ -5,6 +5,7 @@ create table products (
   id uuid primary key,
   name text not null,
   category text not null check (category in ('soft','nonal','can','draft')),
+  location text not null default '坂下',  -- 販売所。商品は販売所に属する
   price integer not null check (price >= 0),
   sort_order integer not null default 0,
   active boolean not null default true,
@@ -24,6 +25,7 @@ create table stock_events (
 create table sales (
   id uuid primary key,
   device text,
+  location text,  -- 会計時の販売所
   items jsonb not null,
   payment text not null check (payment in ('cash','paypay')),
   total integer not null,
@@ -37,6 +39,7 @@ create table sales (
 
 create table cash_counts (
   id uuid primary key,
+  location text,  -- 点検した販売所
   counted_amount integer not null,
   float_amount integer not null default 0,
   theoretical_amount integer not null,
@@ -79,7 +82,11 @@ create policy anon_all on sales for all using (true) with check (true);
 create policy anon_all on cash_counts for all using (true) with check (true);
 create policy anon_all on devices for all using (true) with check (true);
 
--- 【既存DBの移行用】v1.4でカテゴリ4分類化(soft/nonal/can/draft)。
--- 上のcreate tableを旧版で実行済みの場合のみ、以下の2行を実行する:
--- alter table products drop constraint products_category_check;
--- alter table products add constraint products_category_check check (category in ('soft','nonal','can','draft'));
+-- 【既存DBの移行用】上のcreate tableを旧版で実行済みの場合のみ、必要な行を実行する:
+-- v1.4 カテゴリ4分類化:
+--   alter table products drop constraint products_category_check;
+--   alter table products add constraint products_category_check check (category in ('soft','nonal','can','draft'));
+-- v1.6 販売所(2売り場)対応:
+--   alter table products add column location text not null default '坂下';
+--   alter table sales add column location text;
+--   alter table cash_counts add column location text;

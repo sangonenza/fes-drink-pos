@@ -1,6 +1,6 @@
-# ロックフェス ドリンク会計・在庫管理ソフト 要件定義 v1.5
+# ロックフェス ドリンク会計・在庫管理ソフト 要件定義 v1.6
 
-作成日: 2026-07-16(v1.5: 生ビールを使い捨てカップ実数基準に変更・レジの残数表示を廃止 / v1.4: ソフトドリンクとノンアルを別カテゴリに分離し4分類化 / v1.3: 2日間開催に対応=日別集計・レジ点検を当日基準に / v1.2: 在庫照合ミス防止の仕組みを追加 / v1.1: カテゴリ区分を変更、生ビールの在庫単位を定義)
+作成日: 2026-07-16(v1.6: 2販売所(坂下/坂上)対応 / v1.5: 生ビールを使い捨てカップ実数基準に変更・レジの残数表示を廃止 / v1.4: ソフトドリンクとノンアルを別カテゴリに分離し4分類化 / v1.3: 2日間開催に対応=日別集計・レジ点検を当日基準に / v1.2: 在庫照合ミス防止の仕組みを追加 / v1.1: カテゴリ区分を変更、生ビールの在庫単位を定義)
 
 ## 決定事項
 
@@ -16,6 +16,7 @@
 ## 前提・運用環境
 
 - **2日間開催のイベント**。在庫は1日目から2日目へ持ち越し、売上は日別に集計する
+- **販売所は2か所(坂下ドリンク / 坂上ドリンク)**。商品・価格・在庫は販売所ごとに独立(共通の飲み物も販売所ごとに別登録)。各端末は設定で自分の販売所を選び、レジ・在庫・棚卸し・レジ点検は自販売所のみを扱う。集計は「全体/坂下/坂上」で切り替え(既定は自販売所)
 - フェス会場のドリンク売り場。タッチ操作前提の大きいボタンUI
 - 各端末は自身のモバイル回線でクラウドに接続する
 - **回線は不安定である前提**で設計する(下記「オフライン耐性」)
@@ -110,9 +111,10 @@
 ## データモデル
 
 ```
-products:      id, name, category('soft'|'nonal'|'can'|'draft'), price,
-               sort_order, active(論理削除フラグ)
+products:      id, name, category('soft'|'nonal'|'can'|'draft'), location(販売所),
+               price, sort_order, active(論理削除フラグ)
                ※ soft=ソフトドリンク / nonal=ノンアルコール / can=缶のお酒 / draft=生ビール
+               ※ 商品は販売所に属する。在庫は商品単位の導出値なので自動的に販売所単位になる
 
 stock_events:  id, product_id, qty_delta(±), created_at, reason(任意),
                type('initial'|'restock'|'loss'|'adjust')
@@ -121,7 +123,7 @@ stock_events:  id, product_id, qty_delta(±), created_at, reason(任意),
 cash_counts:   id, counted_amount(実査額), theoretical_amount(理論残),
                diff, note, created_at(レジ点検の記録)
 
-sales:         id, device_id, items(jsonb: [{product_id, name, qty, unit_price}]),
+sales:         id, device_id, location(販売所), items(jsonb: [{product_id, name, qty, unit_price}]),
                payment('cash'|'paypay'), total,
                cash_received, change,
                status('completed'|'cancelled'), created_at, cancelled_at
