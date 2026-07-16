@@ -198,6 +198,8 @@ const LS_KEY = 'fespos.v1';
 const CATS = { soft:'ソフトドリンク', nonal:'ノンアルコール', can:'缶のお酒', draft:'生ビール' };
 const LOCS = ['坂下','坂上']; // 販売所。商品は販売所に属する(共通商品は各販売所に別登録)
 const EV_TYPES = { initial:'初期搬入', restock:'補充', loss:'ロス', adjust:'棚卸し調整' };
+const DENOMS = [10000, 5000, 1000, 500, 100, 50, 10]; // 釣り銭準備金の金種
+const denomName = d => d>=1000 ? `${d.toLocaleString()}円札` : `${d}円玉`;
 
 const uuid = () => crypto.randomUUID ? crypto.randomUUID() :
   'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c=='x'?r:(r&0x3|0x8)).toString(16)});
@@ -295,7 +297,10 @@ async function syncTick(){
     ui.lastSyncAt = Date.now(); ui.syncErr = false;
   } catch(e){ ui.syncErr = true; console.warn('sync:', e.message); }
   syncing = false;
-  renderChip(); render();
+  renderChip();
+  // 入力中の再描画はフォーカス喪失・入力消失を招くのでスキップ(次のtickで反映される)
+  const ae = document.activeElement;
+  if (!ae || !['INPUT','TEXTAREA','SELECT'].includes(ae.tagName)) render();
 }
 function renderChip(){
   const c = $id('chip');
@@ -715,7 +720,7 @@ function renderCount(){
           <td class="${r.diff===0?'':(r.diff>0?'diffpos':'diffneg')}">${r.diff>0?'+':''}${r.diff}</td></tr>`).join('')}
       </table></div>
       ${rows.some(r=>r.diff!==0)?`
-        <label class="fld">調整理由(任意)</label><input id="f-adjreason" placeholder="例: 締め棚卸し">
+        <label class="fld">調整理由(任意)</label><input id="f-adjreason" placeholder="例: 締め棚卸し" value="${esc(ui.adjReason||'')}" oninput="ui.adjReason=this.value">
         <button class="btn primary" style="width:100%; margin-top:12px; padding:14px" onclick="applyAdjust()">差異を調整として記録する</button>
         <p class="sub">理論在庫を実在庫に合わせる調整イベントを記録します(履歴に残ります)。</p>`
         :`<div class="banner info">差異はありません 🎉</div>`}`;
@@ -754,7 +759,7 @@ function applyAdjust(){
   const reason = ($id('f-adjreason').value.trim()) || '棚卸し調整';
   let n = 0;
   for (const r of ui.countResult) if (r.diff!==0){ addStockEvent(r.pid, r.diff, 'adjust', reason); n++; }
-  ui.countResult = null; ui.countInputs = {};
+  ui.countResult = null; ui.countInputs = {}; ui.adjReason = '';
   go('stock'); toast(`${n}件の調整を記録しました`);
 }
 
@@ -827,12 +832,12 @@ function renderReport(){
     </table></div>
     <h2>会計履歴(直近60件)</h2>
     <div class="card">${hist.length ? hist.map((s,i)=>{
-      // 打ち直し・二度打ちの発見用: 直後(履歴上は次行)の会計と内容が同じで3分以内なら警告
+      // 打ち直し・二度打ちの発見用: 直後(履歴上は次行)の会計と内容が同じで30秒以内なら警告
       const sig = x => x.items.map(it=>`${it.product_id}x${it.qty}`).sort().join();
       const prev = hist[i+1];
       const dup = prev && s.status==='completed' && prev.status==='completed'
         && s.total===prev.total && sig(s)===sig(prev)
-        && (new Date(s.created_at)-new Date(prev.created_at)) < 180000;
+        && (new Date(s.created_at)-new Date(prev.created_at)) < 30000;
       return `
       <div class="listrow ${s.status==='cancelled'?'cancelled':''}">
         <span class="sub" style="font-variant-numeric:tabular-nums">${hhmmss(s.created_at)}</span>
@@ -895,10 +900,22 @@ function renderCash(){
     <h2>レジ点検(現金実査・${esc(S.cfg.loc)})</h2>
     <div class="card">
       <div class="kv"><span>本日の現金売上(理論)</span><b>${yen(st.cash)}</b></div>
-      <label class="fld">釣り銭準備金(あれば・任意)</label><input id="f-float" type="number" inputmode="numeric" value="0" oninput="cashDiff()">
-      <label class="fld">実際のレジ金を数えて入力</label><input id="f-counted" type="number" inputmode="numeric" placeholder="例: 52000" oninput="cashDiff()">
+      <label class="fld">釣り銭準備金(開始時の金庫残高) — 金種ごとに枚数を数えて入力</label>
+      ${DENOMS.map(d=>`
+        <div class="row" style="margin-top:6px">
+          <span style="min-width:92px">${denomName(d)}</span>
+          <input id="fc-${d}" type="number" inputmode="numeric" placeholder="0"
+            value="${(ui.cashDraft&&ui.cashDraft['fc-'+d])??((S.floatCounts&&S.floatCounts[d])||'')}"
+            style="width:90px; text-align:right" oninput="stashCash(this)">
+          <span class="sub" style="min-width:22px">枚</span>
+          <span class="grow right sub" id="fs-${d}"></span>
+        </div>`).join('')}
+      <div class="kv" style="margin-top:8px"><span>準備金 合計</span><b id="f-floatsum">¥0</b></div>
+      <label class="fld">実際のレジ金を数えて入力</label><input id="f-counted" type="number" inputmode="numeric" placeholder="例: 52000"
+        value="${(ui.cashDraft&&ui.cashDraft['f-counted'])||''}" oninput="stashCash(this)">
       <div class="kv"><span>差額(実際 − 理論)</span><b id="f-diff">—</b></div>
-      <label class="fld">メモ(任意)</label><input id="f-cnote" placeholder="例: 交代時点検">
+      <label class="fld">メモ(任意)</label><input id="f-cnote" placeholder="例: 交代時点検"
+        value="${esc((ui.cashDraft&&ui.cashDraft['f-cnote'])||'')}" oninput="stashCash(this)">
       <button class="btn primary" style="width:100%; margin-top:14px; padding:14px" onclick="saveCashCount(${st.cash})">記録する</button>
     </div>
     <h2>点検履歴</h2>
@@ -907,22 +924,37 @@ function renderCash(){
         <span class="grow">実際 ${yen(c.counted_amount)} / 理論 ${yen(c.theoretical_amount)}${c.location?` <span class="tag">${esc(c.location)}</span>`:''}${c.note?`<br><span class="sub">${esc(c.note)}</span>`:''}</span>
         <b class="${c.diff===0?'':(c.diff>0?'diffpos':'diffneg')}">${c.diff>0?'+':''}${yen(c.diff).replace('¥-','−¥')}</b></div>`).join('')
       : '<div class="empty">まだ記録がありません</div>'}</div>`;
+  cashDiff(); // 記憶済みの枚数から小計・合計を初期表示
+}
+function stashCash(el){ (ui.cashDraft = ui.cashDraft || {})[el.id] = el.value; cashDiff(); }
+function floatAmount(){
+  let sum = 0;
+  for (const d of DENOMS){
+    const n = parseInt(($id('fc-'+d)||{}).value,10)||0;
+    const sub = n*d; sum += sub;
+    const el = $id('fs-'+d); if (el) el.textContent = sub ? yen(sub) : '';
+  }
+  const t = $id('f-floatsum'); if (t) t.textContent = yen(sum);
+  return sum;
 }
 function cashDiff(){
   const counted = parseInt($id('f-counted').value,10);
-  const flo = parseInt($id('f-float').value,10)||0;
-  const theo = salesStats(localDay(nowIso()), S.cfg.loc).cash + flo;
+  const theo = salesStats(localDay(nowIso()), S.cfg.loc).cash + floatAmount();
   $id('f-diff').textContent = isNaN(counted) ? '—' : yen(counted-theo).replace('¥-','−¥');
 }
 function saveCashCount(cashSales){
   const counted = parseInt($id('f-counted').value,10);
   if (isNaN(counted)){ toast('実際のレジ金を入力してください'); return; }
-  const flo = parseInt($id('f-float').value,10)||0;
+  const flo = floatAmount();
+  // 数えた枚数は端末に記憶(同日の再点検で数え直さなくて済む)
+  S.floatCounts = {};
+  for (const d of DENOMS){ const n = parseInt($id('fc-'+d).value,10)||0; if (n) S.floatCounts[d] = n; }
   const theo = cashSales + flo;
   const rec = { id:uuid(), location:S.cfg.loc, counted_amount:counted, float_amount:flo, theoretical_amount:theo, diff:counted-theo,
     note:$id('f-cnote').value.trim()||null, created_at:nowIso() };
   S.cash.push(rec);
   S.outbox.push({op:'insert', table:'cash_counts', row:rec});
+  ui.cashDraft = null;
   save(); render(); syncTick(); toast('点検を記録しました');
 }
 
