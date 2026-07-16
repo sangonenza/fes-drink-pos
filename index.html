@@ -347,7 +347,9 @@ function renderRegister(){
       const soldout = s<=0 && cat!=='draft'; // 生ビールは杯数が目安なので0でも売れる
       const low = s<=S.cfg.threshold;
       const q = ui.cart[p.id]||0;
-      html += `<button class="prod cat-${cat} ${q?'sel':''}" ${soldout?'disabled':''} onclick="tapProd('${p.id}')">
+      html += `<button class="prod cat-${cat} ${q?'sel':''}" ${soldout?'disabled':''}
+        onclick="prodClick('${p.id}')" onpointerdown="prodDown('${p.id}')"
+        onpointerup="prodPressEnd()" onpointerleave="prodPressEnd()" onpointercancel="prodPressEnd()">
         <span class="pname">${esc(p.name)}</span><span class="pprice">${yen(p.price)}</span>
         ${cat==='draft'?'':`<span class="pstock ${low?'low':''}">${soldout?'売切':`残${s}`}</span>`}
         ${q?`<span class="psel">${q}</span>`:''}</button>`;
@@ -355,6 +357,26 @@ function renderRegister(){
     html += '</div>';
   }
   el.innerHTML = html;
+}
+/* 誤タップ対策: タップ=+1のまま、長押し(550ms)でその商品の選択を解除 */
+const lp = { timer:null, fired:false };
+function prodDown(pid){
+  lp.fired = false;
+  clearTimeout(lp.timer);
+  lp.timer = setTimeout(()=>{
+    if (ui.cart[pid]){
+      lp.fired = true; // 直後に発火するclickを無視させる
+      delete ui.cart[pid];
+      if (navigator.vibrate) navigator.vibrate(30);
+      toast('選択を解除しました');
+      render();
+    }
+  }, 550);
+}
+function prodPressEnd(){ clearTimeout(lp.timer); }
+function prodClick(pid){
+  if (lp.fired){ lp.fired = false; return; }
+  tapProd(pid);
 }
 function tapProd(pid){
   const p = prodById(pid); const st = stockMap();
@@ -382,7 +404,7 @@ function renderCart(){
   if (ui.view!=='register' || !items.length){ bar.style.display='none'; return; }
   bar.style.display='block';
   const cnt = items.reduce((a,i)=>a+i.qty,0);
-  $id('cartinner').innerHTML = items.map(it=>`
+  $id('cartinner').innerHTML = `<div class="sub" style="text-align:center; padding-top:4px">商品ボタン: タップで+1 / 長押しで解除</div>` + items.map(it=>`
     <div class="cartrow"><span class="nm">${esc(it.name)}</span>
       <div class="stepper"><button onclick="chgCart('${it.product_id}',-1)">−</button><span class="q">${it.qty}</span><button onclick="chgCart('${it.product_id}',1)">＋</button></div>
       <span style="min-width:72px" class="right">${yen(it.qty*it.unit_price)}</span></div>`).join('') +
