@@ -280,17 +280,31 @@ async function sb(path, opts={}){
   const txt = await res.text();
   return txt ? JSON.parse(txt) : null;
 }
+const RETRY_4XX = new Set([401,403,408,425,429]); // 認証・タイムアウト・レート制限は一時的とみなし再送
 async function pushOutbox(){
   while (S.outbox.length){
     const op = S.outbox[0];
-    if (op.op==='insert'){
-      // 一意制約+ignore-duplicatesで再送しても二重登録されない(冪等)
-      await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=ignore-duplicates'}, body:JSON.stringify([op.row]) });
-    } else if (op.op==='upsert'){
-      // event_config用: 上書き更新(LWW)
-      await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=merge-duplicates'}, body:JSON.stringify([op.row]) });
-    } else {
-      await sb(`${op.table}?id=eq.${op.id}`, { method:'PATCH', body:JSON.stringify(op.patch) });
+    try {
+      if (op.op==='insert'){
+        // 一意制約+ignore-duplicatesで再送しても二重登録されない(冪等)
+        await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=ignore-duplicates'}, body:JSON.stringify([op.row]) });
+      } else if (op.op==='upsert'){
+        // event_config用: 上書き更新(LWW)
+        await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=merge-duplicates'}, body:JSON.stringify([op.row]) });
+      } else {
+        await sb(`${op.table}?id=eq.${op.id}`, { method:'PATCH', body:JSON.stringify(op.patch) });
+      }
+    } catch(e){
+      const mt = /^HTTP (\d\d\d)/.exec(e.message);
+      const code = mt ? +mt[1] : 0;
+      // 4xx(データ不正・制約違反)は再送しても直らない → 退避して先へ。1件の不良で全同期が止まるのを防ぐ
+      if (code>=400 && code<500 && !RETRY_4XX.has(code)){
+        (S.deadletter = S.deadletter || []).push({ op, error:e.message, at:nowIso() });
+        S.outbox.shift(); save();
+        console.warn('sync: 送信できないデータを退避:', op.table, e.message);
+        continue;
+      }
+      throw e; // 通信断・5xx・認証/レート = 一時的なので次tickで再送
     }
     S.outbox.shift(); save();
   }
@@ -1511,6 +1525,16 @@ function renderSettings(){
       <p class="sub">「HH:MM-HH:MM 名前」で1行1枠。「HH:MM 名前」だけなら単発マーク(会場入り・END等)。DJ/転換/リハ/チェックを含む行は薄色で表示されます。シフトはタイテ画面の「シフトを編集」から。</p>
       <button class="btn primary" style="width:100%; margin-top:12px; padding:14px" onclick="saveEvent()">管理者設定を保存(全端末に反映)</button>
     </div>
+    <h2>同期の状態</h2>
+    <div class="card">
+      <div class="kv"><span>未送信(送信待ち)</span><b>${S.outbox.length}件</b></div>
+      <div class="kv"><span>送信できず退避</span><b>${(S.deadletter||[]).length}件</b></div>
+      <div class="toolbar" style="margin-top:10px">
+        <button class="btn" onclick="forceSync()">今すぐ同期</button>
+        ${S.outbox.length ? `<button class="btn danger" onclick="clearOutbox()">未送信を破棄(${S.outbox.length}件)</button>` : ''}
+      </div>
+      ${S.outbox.length ? `<p class="sub">「未送信」が減らずに止まる場合、先頭の1件がサーバに拒否されている可能性があります。まず「今すぐ同期」、直らなければ「未送信を破棄」で詰まりを解消できます(破棄した内容は端末内の退避リストに残ります)。</p>` : ''}
+    </div>
     <h2>メンテナンス</h2>
     <div class="card">
       <div class="toolbar">
@@ -1518,6 +1542,13 @@ function renderSettings(){
         <button class="btn danger" onclick="wipe()">この端末のデータを全消去</button>
       </div>
     </div>`;
+}
+async function forceSync(){ ui.syncErr=false; await syncTick(); render(); toast(S.outbox.length? `未送信 ${S.outbox.length}件` : '同期しました'); }
+function clearOutbox(){
+  if (!S.outbox.length) return;
+  if (!confirm(`未送信の${S.outbox.length}件を送信待ちから外します。\n(内容は端末内の退避リストに保存されます。)`)) return;
+  (S.deadletter = S.deadletter || []).push(...S.outbox.map(op=>({op, error:'手動破棄', at:nowIso()})));
+  S.outbox = []; ui.syncErr=false; save(); syncTick(); render(); toast('未送信をクリアしました');
 }
 function saveSettings(){
   S.cfg.loc = $id('s-loc').value;
