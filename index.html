@@ -931,7 +931,9 @@ function renderReport(){
           ${dup?'<span class="tag" style="background:#fdeaea;color:var(--ng)">⚠ 直前と同一内容</span>':''}<br>
           <span class="sub">${s.payment==='cash'?'現金':'PayPay'} / ${esc(locName(s.location))} ${esc(s.device||'')}</span></span>
         <b>${yen(s.total)}</b>
-        ${s.status==='completed' ? `<button class="btn sm danger" onclick="cancelSale('${s.id}')">取消</button>` : '<span class="tag">取消済</span>'}
+        ${s.status==='completed'
+          ? `<button class="btn sm danger" onclick="cancelSale('${s.id}')">取消</button>`
+          : `<span class="tag">取消済</span><button class="btn sm" onclick="restoreSale('${s.id}')">戻す</button>`}
       </div>`}).join('') : '<div class="empty">まだ会計がありません</div>'}
     ${hist.length>ui.histLimit ? `<button class="btn" style="width:100%; margin-top:8px" onclick="ui.histLimit+=100; render()">もっと見る(残り${hist.length-ui.histLimit}件)</button>` : ''}</div>`;
 }
@@ -941,6 +943,14 @@ function cancelSale(id){
   s.status='cancelled'; s.cancelled_at=nowIso(); s.updated_at=nowIso();
   S.outbox.push({op:'update', table:'sales', id, patch:{status:'cancelled', cancelled_at:s.cancelled_at}});
   save(); render(); syncTick(); toast('取り消しました');
+}
+function restoreSale(id){
+  const s = S.sales.find(x=>x.id===id);
+  if (!s || s.status!=='cancelled') return;
+  if (!confirm(`取消を解除して、この会計(${yen(s.total)})を元に戻しますか?\n売上に再計上され、在庫がもう一度引かれます。`)) return;
+  s.status='completed'; s.cancelled_at=null; s.updated_at=nowIso();
+  S.outbox.push({op:'update', table:'sales', id, patch:{status:'completed', cancelled_at:null}});
+  save(); render(); syncTick(); toast('会計を元に戻しました');
 }
 function dlCSV(name, lines){
   const blob = new Blob(['﻿'+lines.join('\r\n')], {type:'text/csv'});
