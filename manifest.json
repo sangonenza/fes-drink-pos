@@ -1,6 +1,6 @@
 {
-  "name": "BAITEN",
-  "short_name": "BAITEN",
+  "name": "GFB",
+  "short_name": "GFB",
   "description": "フェス売店の会計・在庫・スタッフ・統計・タイムテーブル",
   "start_url": "./",
   "display": "standalone",

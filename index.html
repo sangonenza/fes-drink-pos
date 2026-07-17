@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#15325b">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
-<title>BAITEN</title>
+<title>GFB</title>
 <style>
 :root{
   --soft:#1e78d7; --soft-bg:#e8f2fc;
@@ -157,7 +157,7 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
 <body>
 
 <header>
-  <span class="ttl">🍻 BAITEN</span>
+  <span class="ttl">🍻 GFB</span>
   <span id="locb" style="font-size:12px; background:#ffffff2b; padding:3px 9px; border-radius:99px"></span>
   <span id="chip">…</span>
   <button id="gear" onclick="go('settings')">⚙︎</button>
@@ -200,7 +200,9 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
 /* ================= 基盤 ================= */
 const LS_KEY = 'fespos.v1';
 const CATS = { soft:'ソフトドリンク', nonal:'ノンアルコール', can:'缶のお酒', draft:'生ビール' };
-const LOCS = ['坂下','坂上']; // 販売所。商品は販売所に属する(共通商品は各販売所に別登録)
+const LOCS = ['坂下','坂上']; // 販売所の内部キー(既存データ互換のため値は据え置き)
+const LOC_LABEL = { '坂下':'坂ドリンク', '坂上':'丘の上ドリンク' }; // 表示名
+const locName = l => LOC_LABEL[l] || l || '';
 const EV_TYPES = { initial:'初期搬入', restock:'補充', loss:'ロス', adjust:'棚卸し調整' };
 const DENOMS = [10000, 5000, 1000, 500, 100, 50, 10]; // 釣り銭準備金の金種
 const denomName = d => d>=1000 ? `${d.toLocaleString()}円札` : `${d}円玉`;
@@ -210,11 +212,14 @@ const DEFAULT_EVENT = {
   days: ['2026-07-18','2026-07-19'],
   open: '10:30', end: '21:00',
   tt: {
-    d1saka: "7:00 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 チーナ リハーサル\n10:20-10:30 DJチェック・会場なおし\n10:30-11:35 DJ yusk/minisky\n11:35-12:15 チーナ\n12:15-12:55 DJ 星原喜一郎 (転換)\n12:55-13:35 浪漫革命\n13:35-14:10 DJ ヒサシtheKID (転換)\n14:10-14:50 DENIMS\n14:50-15:30 DJ KIKUCHI HIDEAKI (転換)\n15:30-16:10 TENDRE\n16:10-16:50 DJ KATE (転換)\n16:50-17:30 Homecomings\n17:30-18:10 DJ ヒサシtheKID (転換)\n18:10-18:50 saccharin\n18:50-19:35 DJ 星原喜一郎 (転換)\n19:35-20:20 んoon\n20:20-20:45 DJ yusk/minisky\n20:45 END 完全音止め\n21:00 END(撤収)",
+    d1saka: "7:00 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 チーナ リハーサル\n10:20-10:30 DJチェック・会場なおし\n10:30-11:35 DJ yusk/minisky\n11:35-12:15 チーナ\n12:15-12:55 DJ 星原喜一郎 (転換)\n12:55-13:35 浪漫革命\n13:35-14:10 DJ ヒサシtheKID (転換)\n14:10-14:50 DENIMS\n14:50-15:30 DJ KIKUCHI HIDEAKI (転換)\n15:30-16:10 TENDRE\n16:10-16:50 DJ KATE (転換)\n16:50-17:30 Homecomings\n17:30-18:10 DJ ヒサシtheKID (転換)\n18:10-18:50 saccharin\n18:50-19:35 DJ 星原喜一郎 (転換)\n19:35-20:20 んoon\n20:20-20:45 DJ yusk/minisky",
     d1oka: "7:00 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 Johnson KOGA リハ\n11:00-11:30 Johnson KOGA\n11:30-12:20 転換\n12:20-12:50 松澤在音\n12:50-13:35 転換\n13:35-14:05 Gingersamm\n14:05-14:55 転換\n14:55-15:25 SYAYOS\n15:25-16:15 転換\n16:15-16:45 mayu (band set)\n16:45-17:35 転換\n17:35-18:05 Nikoん\n18:05-18:55 転換\n18:55-19:30 ゴリラ祭ーズ",
-    d2saka: "7:30 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 Khaki リハーサル\n10:20-10:30 DJチェック・会場なおし\n10:30-11:25 DJ yusk/minisky\n11:25-12:05 Khaki\n12:05-12:45 DJ 片山翔太 (転換)\n12:45-13:25 トリプルファイヤー\n13:25-14:05 DJ ノロマトンマVC (転換)\n14:05-14:45 DYGL\n14:45-15:25 DJ YIYI (転換)\n15:25-16:05 YONA YONA WEEKENDERS\n16:05-16:45 DJ HAGA (転換)\n16:45-17:25 SuiseiNoboAz\n17:25-18:10 DJ yusk/minisky (転換)\n18:10-18:50 LOSTAGE\n18:50-19:40 DJ 片山翔太 (転換)\n19:40-20:20 TENDOUJI\n20:20-20:45 DJ yusk/minisky\n20:45 END 完全音止め\n21:00 END(撤収)",
+    d2saka: "7:30 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 Khaki リハーサル\n10:20-10:30 DJチェック・会場なおし\n10:30-11:25 DJ yusk/minisky\n11:25-12:05 Khaki\n12:05-12:45 DJ 片山翔太 (転換)\n12:45-13:25 トリプルファイヤー\n13:25-14:05 DJ ノロマトンマVC (転換)\n14:05-14:45 DYGL\n14:45-15:25 DJ YIYI (転換)\n15:25-16:05 YONA YONA WEEKENDERS\n16:05-16:45 DJ HAGA (転換)\n16:45-17:25 SuiseiNoboAz\n17:25-18:10 DJ yusk/minisky (転換)\n18:10-18:50 LOSTAGE\n18:50-19:40 DJ 片山翔太 (転換)\n19:40-20:20 TENDOUJI\n20:20-20:45 DJ yusk/minisky",
     d2oka: "7:30 スタッフ会場入り\n9:00-9:45 サウンドチェック\n9:45-10:15 田山ショーゴ リハ\n10:50-11:20 田山ショーゴ (BAND SET)\n11:20-12:10 転換(クリトリック・リス自由時間 音80%)\n12:10-12:40 クリトリック・リス\n12:40-13:30 転換\n13:30-14:00 Gateballsers\n14:00-14:50 転換\n14:50-15:20 テレビ大陸音頭\n15:20-16:10 転換\n16:10-16:40 ベランダ\n16:40-17:30 転換\n17:30-18:05 Soft Pine\n18:05-18:55 転換\n18:55-19:35 和久井沙良"
   },
+  entry: '08:30',     // 会場入り(売店クルー)
+  soundoff: '20:45',  // END 完全音止め
+  // end(21:00)=END 撤収。OPEN/完全音止め/撤収の3つは会場全体マーカーとして表示
   shifts: { d1: [], d2: [] } // [{s:'10:30', e:'13:00', name:'和真', loc:'坂下'}, ...]
 };
 const normShifts = sh => ({ d1: Array.isArray(sh&&sh.d1)?sh.d1:[], d2: Array.isArray(sh&&sh.d2)?sh.d2:[] });
@@ -392,7 +397,7 @@ function go(v){
   window.scrollTo(0,0);
 }
 function render(){
-  $id('locb').textContent = S.cfg.loc;
+  $id('locb').textContent = locName(S.cfg.loc);
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('act'));
   const el = $id('view-'+ui.view); el.classList.add('act');
   ({register:renderRegister, products:renderProducts, stock:renderStock, report:renderReport,
@@ -405,7 +410,7 @@ function render(){
 function renderRegister(){
   const el = $id('view-register');
   const prods = locProducts();
-  if (!prods.length){ el.innerHTML = `<div class="empty">${esc(S.cfg.loc)}の商品が未登録です。<br>「商品」タブで登録するか、⚙︎設定で販売所を確認してください。</div>`; return; }
+  if (!prods.length){ el.innerHTML = `<div class="empty">${esc(locName(S.cfg.loc))}の商品が未登録です。<br>「商品」タブで登録するか、⚙︎設定で販売所を確認してください。</div>`; return; }
   const st = stockMap();
   let html = '';
   for (const cat of ['soft','nonal','can','draft']){
@@ -584,7 +589,10 @@ function renderProducts(){
   const act = activeProducts();
   const inact = S.products.filter(p=>!p.active);
   el.innerHTML = `
-    <div class="toolbar"><button class="btn primary" onclick="editProd(null)">＋ 商品を追加</button></div>
+    <div class="toolbar">
+      <button class="btn" onclick="go('stock')">← 在庫へ戻る</button>
+      <button class="btn primary" onclick="editProd(null)">＋ 商品を追加</button>
+    </div>
     <div class="card">
       <b>ジャンル一律価格</b>
       ${['soft','nonal','can','draft'].map(c=>`
@@ -595,7 +603,7 @@ function renderProducts(){
     </div>
     <div class="card">${act.length ? act.map((p,i)=>`
       <div class="listrow"><span class="catdot ${p.category}"></span>
-        <span class="grow"><b>${esc(p.name)}</b><br><span class="sub">${CATS[p.category]} ・ ${esc(locOf(p))}</span></span>
+        <span class="grow"><b>${esc(p.name)}</b><br><span class="sub">${CATS[p.category]} ・ ${esc(locName(locOf(p)))}</span></span>
         <b>${yen(p.price)}</b>
         <button class="btn sm" ${i===0?'disabled':''} onclick="moveProd('${p.id}',-1)">↑</button>
         <button class="btn sm" ${i===act.length-1?'disabled':''} onclick="moveProd('${p.id}',1)">↓</button>
@@ -614,7 +622,7 @@ function editProd(pid){
     <label class="fld">カテゴリ</label>
     <select id="f-cat">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${p&&p.category===k?'selected':''}>${v}</option>`).join('')}</select>
     <label class="fld">販売所</label>
-    <select id="f-loc">${LOCS.map(l=>`<option value="${l}" ${(p?locOf(p):S.cfg.loc)===l?'selected':''}>${l}</option>`).join('')}</select>
+    <select id="f-loc">${LOCS.map(l=>`<option value="${l}" ${(p?locOf(p):S.cfg.loc)===l?'selected':''}>${locName(l)}</option>`).join('')}</select>
     <label class="fld">価格(円)</label><input id="f-price" type="number" inputmode="numeric" value="${p?p.price:''}" placeholder="例: 500">
     <p class="sub">価格はジャンル一律 — 保存すると同ジャンルの全商品に適用されます</p>
     <button class="btn primary" style="width:100%; margin-top:16px; padding:14px" onclick="saveProd('${pid||''}')">保存</button>
@@ -669,7 +677,7 @@ function renderStock(){
   el.innerHTML = `
     <div class="toolbar"><button class="btn primary" onclick="go('count')">📋 棚卸しへ</button>
       <button class="btn" onclick="go('products')">🏷 商品設定</button>
-      <span class="tag" style="margin-left:auto">${esc(S.cfg.loc)}の在庫</span></div>
+      <span class="tag" style="margin-left:auto">${esc(locName(S.cfg.loc))}の在庫</span></div>
     <div class="card">${prods.length ? prods.map(p=>{
       const s = st[p.id]||0; const low = s<=S.cfg.threshold;
       return `<div class="listrow"><span class="catdot ${p.category}"></span>
@@ -791,7 +799,7 @@ function renderCount(){
   el.innerHTML = `
     <div class="toolbar"><button class="btn" onclick="go('stock')">← 在庫へ戻る</button></div>
     ${warn}
-    <h2>棚卸し(${esc(S.cfg.loc)}) — 実際に数えた数を入力</h2>
+    <h2>棚卸し(${esc(locName(S.cfg.loc))}) — 実際に数えた数を入力</h2>
     <p class="sub">数え終わるまで理論在庫は表示されません(思い込み防止)。生ビールは残りの使い捨てカップ数を数えてください。</p>
     <div class="card">${prods.length ? prods.map(p=>`
       <div class="listrow"><span class="catdot ${p.category}"></span>
@@ -865,7 +873,7 @@ function renderReport(){
   const histShown = hist.slice(0, ui.histLimit);
   el.innerHTML = `
     <div class="chips" style="margin-bottom:2px">
-      ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="setRepLoc('${l}')">${l}</button>`).join('')}
+      ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="setRepLoc('${l}')">${locName(l)}</button>`).join('')}
     </div>
     <div class="chips" style="margin-bottom:10px">
       <button class="${ui.repDay==='today'?'sel':''}" onclick="setRepDay('today')">本日${(S.event.days||[]).includes(today)?`(${S.event.days.indexOf(today)+1}日目)`:''}</button>
@@ -873,7 +881,7 @@ function renderReport(){
       <button class="${ui.repDay==='all'?'sel':''}" onclick="setRepDay('all')">全期間</button>
     </div>
     <div class="statgrid">
-      <div class="stat"><div class="v">${yen(st.total)}</div><div class="l">総売上(${esc(loc)}・${dayName}・${st.count}会計)</div></div>
+      <div class="stat"><div class="v">${yen(st.total)}</div><div class="l">総売上(${esc(locName(loc))}・${dayName}・${st.count}会計)</div></div>
       <div class="stat"><div class="v">${yen(st.cash)}</div><div class="l">💴 現金</div></div>
       <div class="stat"><div class="v">${yen(st.paypay)}</div><div class="l">📱 PayPay</div></div>
       <div class="stat"><div class="v">${st.items}点</div><div class="l">販売点数</div></div>
@@ -907,7 +915,7 @@ function renderReport(){
         <span class="sub" style="font-variant-numeric:tabular-nums">${hhmmss(s.created_at)}</span>
         <span class="grow">${s.items.map(i2=>`${esc(i2.name)}×${i2.qty}`).join(' ')}
           ${dup?'<span class="tag" style="background:#fdeaea;color:var(--ng)">⚠ 直前と同一内容</span>':''}<br>
-          <span class="sub">${s.payment==='cash'?'現金':'PayPay'} / ${esc(s.location||'')} ${esc(s.device||'')}</span></span>
+          <span class="sub">${s.payment==='cash'?'現金':'PayPay'} / ${esc(locName(s.location))} ${esc(s.device||'')}</span></span>
         <b>${yen(s.total)}</b>
         ${s.status==='completed' ? `<button class="btn sm danger" onclick="cancelSale('${s.id}')">取消</button>` : '<span class="tag">取消済</span>'}
       </div>`}).join('') : '<div class="empty">まだ会計がありません</div>'}
@@ -930,7 +938,7 @@ const csvEsc = v => `"${String(v??'').replace(/"/g,'""')}"`;
 function csvSales(){
   const lines = ['時刻,販売所,端末,商品明細,支払,金額,預かり,お釣り,状態'];
   for (const s of [...S.sales].sort((a,b)=>a.created_at.localeCompare(b.created_at))){
-    lines.push([new Date(s.created_at).toLocaleString('ja-JP'), s.location||'', s.device,
+    lines.push([new Date(s.created_at).toLocaleString('ja-JP'), locName(s.location), s.device,
       s.items.map(i=>`${i.name}×${i.qty}`).join(' / '),
       s.payment==='cash'?'現金':'PayPay', s.total, s.cash_received??'', s.change??'',
       s.status==='completed'?'完了':'取消'].map(csvEsc).join(','));
@@ -948,7 +956,7 @@ function csvSummary(){
     byProd[it.name] = byProd[it.name]||{qty:0,amt:0};
     byProd[it.name].qty+=it.qty; byProd[it.name].amt+=it.qty*it.unit_price;
   }
-  const lines = [`対象,${day==='all'?'全期間':day},${loc}`, '項目,数量,金額',
+  const lines = [`対象,${day==='all'?'全期間':day},${locName(loc)}`, '項目,数量,金額',
     `総売上,${st.items},${st.total}`, `現金,,${st.cash}`, `PayPay,,${st.paypay}`, ''];
   lines.push('商品,数量,金額');
   for (const [n,v] of Object.entries(byProd)) lines.push([n,v.qty,v.amt].map(csvEsc).join(','));
@@ -962,7 +970,7 @@ function renderCash(){
   const st = salesStats(localDay(nowIso()), S.cfg.loc);
   el.innerHTML = `
     <div class="toolbar"><button class="btn" onclick="go('report')">← 集計へ戻る</button></div>
-    <h2>レジ点検(現金実査・${esc(S.cfg.loc)})</h2>
+    <h2>レジ点検(現金実査・${esc(locName(S.cfg.loc))})</h2>
     <div class="card">
       <div class="kv"><span>本日の現金売上(理論)</span><b>${yen(st.cash)}</b></div>
       <label class="fld">釣り銭準備金(開始時の金庫残高) — 金種ごとに枚数を数えて入力</label>
@@ -986,7 +994,7 @@ function renderCash(){
     <h2>点検履歴</h2>
     <div class="card">${S.cash.length ? [...S.cash].sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(c=>`
       <div class="listrow"><span class="sub">${hhmm(c.created_at)}</span>
-        <span class="grow">実際 ${yen(c.counted_amount)} / 理論 ${yen(c.theoretical_amount)}${c.location?` <span class="tag">${esc(c.location)}</span>`:''}${c.note?`<br><span class="sub">${esc(c.note)}</span>`:''}</span>
+        <span class="grow">実際 ${yen(c.counted_amount)} / 理論 ${yen(c.theoretical_amount)}${c.location?` <span class="tag">${esc(locName(c.location))}</span>`:''}${c.note?`<br><span class="sub">${esc(c.note)}</span>`:''}</span>
         <b class="${c.diff===0?'':(c.diff>0?'diffpos':'diffneg')}">${c.diff>0?'+':''}${yen(c.diff).replace('¥-','−¥')}</b></div>`).join('')
       : '<div class="empty">まだ記録がありません</div>'}</div>`;
   cashDiff(); // 記憶済みの枚数から小計・合計を初期表示
@@ -1208,7 +1216,7 @@ function renderStats(){
   el.innerHTML = `
     <div class="toolbar"><button class="btn" onclick="go('report')">← 集計へ戻る</button></div>
     <div class="chips" style="margin-bottom:2px">
-      ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="ui.stLoc='${l}';ui.binSel=null;render()">${l}</button>`).join('')}
+      ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="ui.stLoc='${l}';ui.binSel=null;render()">${locName(l)}</button>`).join('')}
     </div>
     <div class="chips" style="margin-bottom:2px">
       ${days.map(d=>`<button class="${day===d?'sel':''}" onclick="ui.stDay='${d}';ui.binSel=null;render()">${dayChipLabel(d)}</button>`).join('')}
@@ -1227,7 +1235,7 @@ function renderStats(){
       </svg></div>
       <div class="sub right" style="font-variant-numeric:tabular-nums">最大 ${maxV}本/5分</div>
     </div>
-    <h2>銘柄ごとの販売本数(${dayChipLabel(day)}・${esc(loc)})</h2>
+    <h2>銘柄ごとの販売本数(${dayChipLabel(day)}・${esc(locName(loc))})</h2>
     <div class="card">
       ${pieTotal ? `
         <svg width="180" height="180" viewBox="0 0 180 180" style="display:block; margin:0 auto 10px">${pieSvg}</svg>
@@ -1269,8 +1277,12 @@ function renderTT(){
   const oka  = parseTT(di===0 ? S.event.tt?.d1oka  : S.event.tt?.d2oka ).filter(a=>a.s);
   const shifts = normShifts(S.event.shifts)[dKey];
 
-  // 時間レンジ(タイテ・シフト・OPEN/ENDを全部含めて時間単位に丸める)
-  let lo = toMin(S.event.open||'10:30'), hi = toMin(S.event.end||'21:00');
+  // 会場全体の主要時刻(会場入り/OPEN/完全音止め/END撤収)
+  const entryT = S.event.entry || '08:30', openT = S.event.open || '10:30';
+  const soundoffT = S.event.soundoff || '20:45', endT = S.event.end || '21:00';
+
+  // 時間レンジ(タイテ・シフト・主要時刻を全部含めて時間単位に丸める)
+  let lo = Math.min(toMin(entryT), toMin(openT)), hi = toMin(endT);
   for (const a of [...saka, ...oka]){ const s=toMin(a.s), e=toMin(a.e); lo=Math.min(lo,s); hi=Math.max(hi,e??s); }
   for (const sh of shifts){ const s=toMin(sh.s), e=toMin(sh.e); if(s!=null){ lo=Math.min(lo,s); hi=Math.max(hi,e??s); } }
   lo = Math.floor(lo/60)*60; hi = Math.ceil(hi/60)*60;
@@ -1319,7 +1331,7 @@ function renderTT(){
       ${live?'outline:2px solid #d63333; z-index:3;':''}">
       <div style="font-size:9px; color:#67718a; font-variant-numeric:tabular-nums">${g.s}-${g.e}</div>
       <div style="font-size:10.5px; font-weight:700; line-height:1.2">${g.names.map(esc).join('・')}</div>
-      <div style="font-size:9px; color:#67718a">${esc(g.loc||'')}</div>
+      <div style="font-size:9px; color:#67718a">${esc(locName(g.loc))}</div>
     </div>`;
   }).join('');
 
@@ -1329,7 +1341,7 @@ function renderTT(){
     grid += `<div style="position:absolute; top:${y(m)}px; left:0; right:0; border-top:1px solid #eef1f6"></div>
       <div style="position:absolute; top:${y(m)+1}px; left:2px; font-size:9px; color:#898781; font-variant-numeric:tabular-nums">${fromMin(m)}</div>`;
   }
-  for (const [t,label] of [[S.event.open,'OPEN'],[S.event.end,'END']]){
+  for (const [t,label] of [[entryT,'会場入り'],[openT,'OPEN'],[soundoffT,'完全音止め'],[endT,'END 撤収']]){
     const m = toMin(t); if (m==null) continue;
     grid += `<div style="position:absolute; top:${y(m)}px; left:0; right:0; border-top:1.5px dashed #b0b8c9; z-index:2">
       <span style="position:absolute; left:2px; top:1px; font-size:9px; color:#67718a; font-weight:700; background:#fff">${label} ${esc(t)}</span></div>`;
@@ -1341,7 +1353,7 @@ function renderTT(){
 
   // 「今」のサマリー(演奏中/シフト中)
   const nowIn = list => list.filter(a=>a.e && toMin(a.s)<=nowMin && nowMin<toMin(a.e)).map(a=>a.name);
-  const nowShift = gl.filter(g=>toMin(g.s)<=nowMin && nowMin<toMin(g.e)).map(g=>`${g.names.join('・')}(${g.loc||''})`);
+  const nowShift = gl.filter(g=>toMin(g.s)<=nowMin && nowMin<toMin(g.e)).map(g=>`${g.names.join('・')}(${locName(g.loc)})`);
   const nowBanner = isToday ? `<div class="banner warn" style="border-color:#e9a0a0; background:#fdecec; color:#8f2020">
     ▶ 坂: <b>${esc(nowIn(saka)[0]||'—')}</b> ／ 丘: <b>${esc(nowIn(oka)[0]||'—')}</b><br>
     🍺 シフト中: <b>${nowShift.length?esc(nowShift.join(' / ')):'—'}</b></div>` : '';
@@ -1351,6 +1363,7 @@ function renderTT(){
       <div class="chips" style="margin:0">${days.map(d=>`<button class="${day===d?'sel':''}" onclick="ui.ttDay='${d}';render()">${dayChipLabel(d)}</button>`).join('')}</div>
       <button class="btn sm" style="margin-left:auto" onclick="openShiftEditor()">✎ シフトを編集</button>
     </div>
+    <div class="banner info" style="font-variant-numeric:tabular-nums">会場入り ${esc(entryT)} ・ OPEN ${esc(openT)} ・ 完全音止め ${esc(soundoffT)} ・ END ${esc(endT)}</div>
     ${nowBanner}
     <div style="display:flex; margin-left:${GUT}px; gap:1.4%; margin-bottom:4px">
       <b style="flex:1; font-size:12px; border-left:5px solid #e6c800; padding-left:6px">坂ステージ</b>
@@ -1396,13 +1409,13 @@ function renderShiftEditor(){
     <div class="row">
       <div class="grow"><label class="fld">開始</label><input id="sh-s" type="time" value="${esc(ui.shS||S.event.open||'10:30')}"></div>
       <div class="grow"><label class="fld">終了</label><input id="sh-e" type="time" value="${esc(ui.shE||'')}"></div>
-      <div class="grow"><label class="fld">販売所</label><select id="sh-loc">${LOCS.map(l=>`<option ${((ui.shLoc||S.cfg.loc)===l)?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="grow"><label class="fld">販売所</label><select id="sh-loc">${LOCS.map(l=>`<option value="${l}" ${((ui.shLoc||S.cfg.loc)===l)?'selected':''}>${locName(l)}</option>`).join('')}</select></div>
     </div>
     <button class="btn primary" style="width:100%; margin-top:10px; padding:12px" onclick="addShifts()">＋ この時間で追加</button>
     <h2>登録済み(${di+1}日目)</h2>
     ${list.length ? list.map(sh=>`<div class="listrow">
       <span class="sub" style="font-variant-numeric:tabular-nums">${esc(sh.s)}-${esc(sh.e)}</span>
-      <span class="grow"><b>${esc(sh.name)}</b> <span class="tag">${esc(sh.loc||'')}</span></span>
+      <span class="grow"><b>${esc(sh.name)}</b> <span class="tag">${esc(locName(sh.loc))}</span></span>
       <button class="btn sm danger" onclick="delShift(${sh._i})">削除</button></div>`).join('')
       : '<div class="empty">まだありません</div>'}`;
 }
@@ -1450,7 +1463,7 @@ function renderSettings(){
     <h2>この端末</h2>
     <div class="card">
       <label class="fld">販売所(この端末が担当する売り場)</label>
-      <select id="s-loc">${LOCS.map(l=>`<option value="${l}" ${c.loc===l?'selected':''}>${l}</option>`).join('')}</select>
+      <select id="s-loc">${LOCS.map(l=>`<option value="${l}" ${c.loc===l?'selected':''}>${locName(l)}</option>`).join('')}</select>
       <label class="fld">端末名(履歴に記録されます)</label><input id="s-device" value="${esc(c.device)}">
       <label class="fld">在庫僅少の警告しきい値</label><input id="s-th" type="number" inputmode="numeric" value="${c.threshold}">
     </div>
@@ -1480,8 +1493,12 @@ function renderSettings(){
         <div class="grow"><label class="fld">開催 2日目</label><input id="ev-d2" type="date" value="${esc((ev.days||[])[1]||'')}"></div>
       </div>
       <div class="row">
+        <div class="grow"><label class="fld">会場入り</label><input id="ev-entry" type="time" value="${esc(ev.entry||'')}"></div>
         <div class="grow"><label class="fld">OPEN</label><input id="ev-open" type="time" value="${esc(ev.open||'')}"></div>
-        <div class="grow"><label class="fld">END</label><input id="ev-end" type="time" value="${esc(ev.end||'')}"></div>
+      </div>
+      <div class="row">
+        <div class="grow"><label class="fld">完全音止め</label><input id="ev-soundoff" type="time" value="${esc(ev.soundoff||'')}"></div>
+        <div class="grow"><label class="fld">END(撤収)</label><input id="ev-end" type="time" value="${esc(ev.end||'')}"></div>
       </div>
       <label class="fld">タイムテーブル 1日目・坂ステージ(1行 =「11:35-12:15 アーティスト」)</label>
       <textarea id="ev-tt-d1saka" rows="6">${esc(ev.tt?.d1saka||'')}</textarea>
@@ -1530,7 +1547,9 @@ function saveEvent(){
   const data = {
     name: $id('ev-name').value.trim(),
     days: [$id('ev-d1').value, $id('ev-d2').value].filter(Boolean),
+    entry: $id('ev-entry').value || '08:30',
     open: $id('ev-open').value || '10:30',
+    soundoff: $id('ev-soundoff').value || '20:45',
     end: $id('ev-end').value || '21:00',
     tt: { d1saka:$id('ev-tt-d1saka').value, d1oka:$id('ev-tt-d1oka').value,
           d2saka:$id('ev-tt-d2saka').value, d2oka:$id('ev-tt-d2oka').value },
