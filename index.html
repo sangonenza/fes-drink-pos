@@ -172,7 +172,6 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
   <div id="view-report" class="view"></div>
   <div id="view-count" class="view"></div>
   <div id="view-cash" class="view"></div>
-  <div id="view-staff" class="view"></div>
   <div id="view-stats" class="view"></div>
   <div id="view-tt" class="view"></div>
   <div id="view-settings" class="view"></div>
@@ -183,7 +182,6 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
 <nav>
   <button data-v="register" onclick="go('register')"><span class="ico">🧾</span>レジ</button>
   <button data-v="stock" onclick="go('stock')"><span class="ico">📦</span>在庫</button>
-  <button data-v="staff" onclick="go('staff')"><span class="ico">🍺</span>スタッフ</button>
   <button data-v="report" onclick="go('report')"><span class="ico">📊</span>集計</button>
   <button data-v="tt" onclick="go('tt')"><span class="ico">🎤</span>タイテ</button>
 </nav>
@@ -433,7 +431,7 @@ function render(){
   const el = $id('view-'+ui.view); el.classList.add('act');
   ({register:renderRegister, products:renderProducts, stock:renderStock, report:renderReport,
     count:renderCount, cash:renderCash, settings:renderSettings,
-    staff:renderStaff, stats:renderStats, tt:renderTT})[ui.view]();
+    stats:renderStats, tt:renderTT})[ui.view]();
   renderCart();
 }
 
@@ -833,7 +831,7 @@ function renderCount(){
           <td class="${r.diff===0?'':(r.diff>0?'diffpos':'diffneg')}">${r.diff>0?'+':''}${r.diff}</td></tr>`).join('')}
       </table></div>
       ${rows.some(r=>r.diff!==0)?`
-        <label class="fld">調整理由(任意)</label><input id="f-adjreason" placeholder="例: 締め棚卸し" value="${esc(ui.adjReason||'')}" oninput="ui.adjReason=this.value">
+        <label class="fld">調整理由(任意)</label><input id="f-adjreason" placeholder="例: 締め棚卸し(スタッフドリンク含む)" value="${esc(ui.adjReason||'')}" oninput="ui.adjReason=this.value">
         <button class="btn primary" style="width:100%; margin-top:12px; padding:14px" onclick="applyAdjust()">差異を調整として記録する</button>
         <p class="sub">理論在庫を実在庫に合わせる調整イベントを記録します(履歴に残ります)。</p>`
         :`<div class="banner info">差異はありません 🎉</div>`}`;
@@ -843,7 +841,7 @@ function renderCount(){
     <div class="toolbar"><button class="btn" onclick="go('stock')">← 在庫へ戻る</button></div>
     ${warn}
     <h2>棚卸し(${esc(locName(S.cfg.loc))}) — 実際に数えた数を入力</h2>
-    <p class="sub">数え終わるまで理論在庫は表示されません(思い込み防止)。生ビールは残りの使い捨てカップ数を数えてください。</p>
+    <p class="sub">数え終わるまで理論在庫は表示されません(思い込み防止)。生ビールは残りの使い捨てカップ数を数えてください。手書き集計のスタッフドリンク分はここの差異に含まれるので、調整理由に「スタッフドリンク◯本」等と書いて記録すればOKです。</p>
     <div class="card">${prods.length ? prods.map(p=>`
       <div class="listrow"><span class="catdot ${p.category}"></span>
         <span class="grow">${esc(p.name)}${p.category==='draft'?'<br><span class="sub">残りカップ数</span>':''}</span>
@@ -1126,106 +1124,28 @@ function saveCashCount(){
   save(); render(); syncTick(); toast('点検を記録しました');
 }
 
-/* ================= スタッフドリンク ================= */
-function renderStaff(){
-  const el = $id('view-staff');
-  const act = S.staff.filter(s=>s.active);
-  const inact = S.staff.filter(s=>!s.active);
-  // 集計: 誰が何を何本
-  const agg = {};
-  for (const d of S.staffDrinks){
-    if (d.cancelled) continue;
-    agg[d.staff_id] = agg[d.staff_id] || { name:d.staff_name, total:0, items:{} };
-    agg[d.staff_id].total++;
-    agg[d.staff_id].items[d.product_name] = (agg[d.staff_id].items[d.product_name]||0) + 1;
-  }
-  const hist = [...S.staffDrinks].sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,30);
-  el.innerHTML = `
-    <div class="toolbar"><button class="btn primary" onclick="addStaffModal()">＋ スタッフを追加</button></div>
-    <h2>スタッフドリンク — 名前をタップ → 飲むものを選ぶ</h2>
-    <p class="sub">在庫から1本引き、誰が何を飲んだか記録されます(売上には入りません)。</p>
-    <div class="grid">${act.length ? act.map(s=>`
-      <button class="prod" style="min-height:60px" onclick="pickStaff('${s.id}')"><span class="pname">${esc(s.name)}</span>
-        <span class="pprice">${agg[s.id]?agg[s.id].total+'本':''}</span></button>`).join('')
-      : '<div class="empty">スタッフが未登録です</div>'}</div>
-    <h2>誰が何を飲んだか</h2>
-    <div class="card">${Object.keys(agg).length ? Object.values(agg).sort((a,b)=>b.total-a.total).map(a=>`
-      <div class="listrow"><span class="grow"><b>${esc(a.name)}</b><br>
-        <span class="sub">${Object.entries(a.items).map(([n,c])=>`${esc(n)}×${c}`).join(' ')}</span></span>
-        <b>${a.total}本</b></div>`).join('') : '<div class="empty">まだ記録がありません</div>'}</div>
-    <h2>記録履歴(直近30件)</h2>
-    <div class="card">${hist.length ? hist.map(d=>`
-      <div class="listrow ${d.cancelled?'cancelled':''}">
-        <span class="sub">${hhmmss(d.created_at)}</span>
-        <span class="grow">${esc(d.staff_name)} — ${esc(d.product_name)}</span>
-        ${d.cancelled ? '<span class="tag">取消済</span>' : `<button class="btn sm danger" onclick="cancelStaffDrink('${d.id}')">取消</button>`}
-      </div>`).join('') : '<div class="empty">まだ記録がありません</div>'}</div>
-    ${act.length?`<div class="toolbar" style="margin-top:8px"><button class="btn sm" onclick="hideStaffModal()">名簿の整理(非表示にする)</button></div>`:''}
-    ${inact.length?`<h2>非表示のスタッフ</h2><div class="card">${inact.map(s=>`
-      <div class="listrow"><span class="grow" style="opacity:.6">${esc(s.name)}</span>
-        <button class="btn sm" onclick="reviveStaff('${s.id}')">再表示</button></div>`).join('')}</div>`:''}`;
-}
-function addStaffModal(){
-  $id('mbox').innerHTML = `<div class="mhead"><b>スタッフを追加</b><button class="x" onclick="closeModal()">閉じる</button></div>
-    <label class="fld">名前</label><input id="f-sname" placeholder="例: 和真">
-    <button class="btn primary" style="width:100%; margin-top:16px; padding:14px" onclick="saveStaff()">追加</button>`;
-  $id('modal').classList.add('open');
-}
+/* ================= スタッフ名簿(シフト編集モーダル内で管理) =================
+   スタッフドリンクの記録機能は廃止: 手書きの正の字で集計し、締めの棚卸しの調整で在庫に反映する運用 */
 function saveStaff(){
-  const name = $id('f-sname').value.trim();
+  const name = $id('ns-name').value.trim();
   if (!name){ toast('名前を入力してください'); return; }
   const row = { id:uuid(), name, active:true, updated_at:nowIso() };
   S.staff.push(row);
   S.outbox.push({op:'insert', table:'staff', row});
-  save(); syncTick(); closeModal(); render(); toast(`${name} を追加しました`);
-}
-function hideStaffModal(){
-  $id('mbox').innerHTML = `<div class="mhead"><b>名簿の整理</b><button class="x" onclick="closeModal()">閉じる</button></div>
-    ${S.staff.filter(s=>s.active).map(s=>`
-      <div class="listrow"><span class="grow">${esc(s.name)}</span>
-        <button class="btn sm danger" onclick="hideStaff('${s.id}')">非表示</button></div>`).join('')}`;
-  $id('modal').classList.add('open');
+  save(); syncTick(); renderShiftEditor(); toast(`${name} を追加しました`);
 }
 function hideStaff(id){
   const s = S.staff.find(x=>x.id===id);
   s.active = false; s.updated_at = nowIso();
   S.outbox.push({op:'update', table:'staff', id, patch:{active:false}});
-  save(); syncTick(); closeModal(); render();
+  delete ui.shiftPick[s.name];
+  save(); syncTick(); renderShiftEditor();
 }
 function reviveStaff(id){
   const s = S.staff.find(x=>x.id===id);
   s.active = true; s.updated_at = nowIso();
   S.outbox.push({op:'update', table:'staff', id, patch:{active:true}});
-  save(); syncTick(); render();
-}
-function pickStaff(id){
-  ui.staffSel = id;
-  const st = S.staff.find(x=>x.id===id);
-  const m = stockMap();
-  $id('mbox').innerHTML = `<div class="mhead"><b>${esc(st.name)} が飲むドリンク(1本)</b><button class="x" onclick="closeModal()">閉じる</button></div>
-    <div class="grid">${locProducts().map(p=>{
-      const s = m[p.id]||0; const out = s<=0 && p.category!=='draft';
-      return `<button class="prod cat-${p.category}" ${out?'disabled':''} onclick="staffDrink('${p.id}')">
-        <span class="pname">${esc(p.name)}</span>${p.category==='draft'?'':`<span class="pstock">残${s}</span>`}</button>`;
-    }).join('')}</div>`;
-  $id('modal').classList.add('open');
-}
-function staffDrink(pid){
-  const st = S.staff.find(x=>x.id===ui.staffSel);
-  const p = prodById(pid);
-  if (!confirm(`${st.name} に ${p.name} を1本でOK?\n在庫から1本引かれます。`)) return;
-  const row = { id:uuid(), staff_id:st.id, staff_name:st.name, product_id:pid, product_name:p.name,
-    location:S.cfg.loc, device:S.cfg.device, cancelled:false, created_at:nowIso(), updated_at:nowIso() };
-  S.staffDrinks.push(row);
-  S.outbox.push({op:'insert', table:'staff_drinks', row});
-  save(); syncTick(); closeModal(); render(); toast(`${st.name}: ${p.name} を記録しました`);
-}
-function cancelStaffDrink(id){
-  const d = S.staffDrinks.find(x=>x.id===id);
-  if (!d || !confirm(`${d.staff_name} の ${d.product_name} を取り消しますか?(在庫が戻ります)`)) return;
-  d.cancelled = true; d.updated_at = nowIso();
-  S.outbox.push({op:'update', table:'staff_drinks', id, patch:{cancelled:true}});
-  save(); syncTick(); render(); toast('取り消しました');
+  save(); syncTick(); renderShiftEditor();
 }
 
 /* ================= 統計(グラフ) ================= */
@@ -1484,7 +1404,7 @@ function renderTT(){
 /* ---- シフト編集 ---- */
 function openShiftEditor(){
   S.event.shifts = normShifts(S.event.shifts);
-  ui.shiftPick = {};
+  ui.shiftPick = {}; ui.staffMng = false;
   renderShiftEditor();
   $id('modal').classList.add('open');
 }
@@ -1496,11 +1416,28 @@ function renderShiftEditor(){
   const dKey = di===0 ? 'd1' : 'd2';
   const list = S.event.shifts[dKey].map((sh,i)=>({...sh,_i:i})).sort((a,b)=>(a.s||'').localeCompare(b.s||''));
   const staffNames = S.staff.filter(s=>s.active).map(s=>s.name);
+  if (ui.staffMng){
+    // 名簿の整理モード
+    const inact = S.staff.filter(s=>!s.active);
+    $id('mbox').innerHTML = `<div class="mhead"><b>メンバー名簿の整理</b><button class="x" onclick="ui.staffMng=false; renderShiftEditor()">← 戻る</button></div>
+      ${S.staff.filter(s=>s.active).map(s=>`
+        <div class="listrow"><span class="grow">${esc(s.name)}</span>
+          <button class="btn sm danger" onclick="hideStaff('${s.id}')">非表示</button></div>`).join('') || '<div class="empty">メンバーがいません</div>'}
+      ${inact.length?`<h2>非表示</h2>${inact.map(s=>`
+        <div class="listrow"><span class="grow" style="opacity:.6">${esc(s.name)}</span>
+          <button class="btn sm" onclick="reviveStaff('${s.id}')">再表示</button></div>`).join('')}`:''}`;
+    return;
+  }
   $id('mbox').innerHTML = `<div class="mhead"><b>シフトを編集(${di+1}日目)</b><button class="x" onclick="closeModal()">閉じる</button></div>
-    <label class="fld">スタッフを選ぶ(複数可)</label>
+    <label class="fld">メンバーを選ぶ(複数可)</label>
     <div class="chips">${staffNames.length ? staffNames.map(n=>`
       <button class="${ui.shiftPick[n]?'sel':''}" onclick="toggleShiftPick(decodeURIComponent('${encodeURIComponent(n).replace(/'/g,'%27')}'))">${esc(n)}</button>`).join('')
-      : '<span class="sub">先にスタッフタブで名簿を登録してください</span>'}</div>
+      : '<span class="sub">下でメンバーを追加してください</span>'}</div>
+    <div class="row" style="margin-top:6px">
+      <input id="ns-name" placeholder="メンバーを追加(名前)" style="flex:1">
+      <button class="btn sm primary" onclick="saveStaff()">＋追加</button>
+      <button class="btn sm" onclick="ui.staffMng=true; renderShiftEditor()">名簿整理</button>
+    </div>
     <div class="row">
       <div class="grow"><label class="fld">開始</label><input id="sh-s" type="time" value="${esc(ui.shS||S.event.open||'10:30')}"></div>
       <div class="grow"><label class="fld">終了</label><input id="sh-e" type="time" value="${esc(ui.shE||'')}"></div>
