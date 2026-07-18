@@ -1494,8 +1494,8 @@ function renderSettings(){
     <div class="toolbar"><button class="btn" onclick="go('products')">🏷 商品・価格設定を開く</button></div>
     <h2>この端末</h2>
     <div class="card">
-      <label class="fld">販売所(この端末が担当する売り場)</label>
-      <select id="s-loc">${LOCS.map(l=>`<option value="${l}" ${c.loc===l?'selected':''}>${locName(l)}</option>`).join('')}</select>
+      <label class="fld">販売所(この端末が担当する売り場) — 選ぶと即切り替わります</label>
+      <select id="s-loc" onchange="S.cfg.loc=this.value; ui.repLoc=null; ui.stLoc=null; ui.cart={}; save(); render(); toast(locName(this.value)+'に切り替えました')">${LOCS.map(l=>`<option value="${l}" ${c.loc===l?'selected':''}>${locName(l)}</option>`).join('')}</select>
       <label class="fld">端末名(履歴に記録されます)</label><input id="s-device" value="${esc(c.device)}">
       <label class="fld">在庫僅少の警告しきい値</label><input id="s-th" type="number" inputmode="numeric" value="${c.threshold}">
     </div>
