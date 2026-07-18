@@ -4,7 +4,7 @@
 create table products (
   id uuid primary key,
   name text not null,
-  category text not null check (category in ('soft','nonal','can','draft')),
+  category text not null check (category in ('soft','nonal','can','draft','craft')),
   location text not null default '坂下',  -- 販売所。商品は販売所に属する
   price integer not null check (price >= 0),
   sort_order integer not null default 0,
@@ -122,6 +122,33 @@ create policy anon_all on devices for all using (true) with check (true);
 create policy anon_all on staff for all using (true) with check (true);
 create policy anon_all on staff_drinks for all using (true) with check (true);
 create policy anon_all on event_config for all using (true) with check (true);
+
+-- ジャンル一律価格(v2.1〜)。価格の正はここ。products.priceは旧版互換の複製
+create table prices (
+  category text primary key check (category in ('soft','nonal','can','draft','craft')),
+  price integer not null check (price >= 0),
+  updated_at timestamptz not null default now()
+);
+create trigger prices_touch before update on prices
+  for each row execute function touch_updated_at();
+alter table prices enable row level security;
+create policy anon_all on prices for all using (true) with check (true);
+insert into prices (category, price) values
+  ('soft',200),('nonal',500),('can',500),('draft',600),('craft',800);
+
+-- 釣り銭準備金(日別・販売所別、金種枚数つき) v2.1〜
+create table cash_floats (
+  id text primary key,              -- "YYYY-MM-DD|販売所"
+  day date not null,
+  location text not null,
+  counts jsonb not null default '{}'::jsonb,
+  total integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+create trigger cash_floats_touch before update on cash_floats
+  for each row execute function touch_updated_at();
+alter table cash_floats enable row level security;
+create policy anon_all on cash_floats for all using (true) with check (true);
 
 -- 【既存DBの移行用】上のcreate tableを旧版で実行済みの場合のみ、必要な行を実行する:
 -- v1.4 カテゴリ4分類化:

@@ -15,6 +15,7 @@
   --nonal:#0f9d7a; --nonal-bg:#e5f6f0;
   --can:#e07020;  --can-bg:#fdf0e4;
   --draft:#c79400; --draft-bg:#fdf6dd;
+  --craft:#a1621f; --craft-bg:#f7ecdf;
   --ink:#1c2330; --sub:#67718a; --line:#dde3ee;
   --bg:#f2f4f8; --card:#fff;
   --ok:#1a9e57; --ng:#d63333; --warn:#b97a00;
@@ -78,6 +79,7 @@ main{max-width:760px; margin:0 auto; padding:12px 12px 24px}
 .prod.cat-nonal{border-left-color:var(--nonal); background:var(--nonal-bg)}
 .prod.cat-can{border-left-color:var(--can); background:var(--can-bg)}
 .prod.cat-draft{border-left-color:var(--draft); background:var(--draft-bg)}
+.prod.cat-craft{border-left-color:var(--craft); background:var(--craft-bg)}
 .prod.sel{outline:3px solid var(--primary); outline-offset:-1px}
 
 /* cart bar */
@@ -125,7 +127,7 @@ main{max-width:760px; margin:0 auto; padding:12px 12px 24px}
 .listrow{display:flex; align-items:center; gap:10px; padding:11px 2px; border-bottom:1px solid var(--line)}
 .listrow:last-child{border-bottom:none}
 .catdot{width:10px; height:10px; border-radius:99px; flex:none}
-.catdot.soft{background:var(--soft)} .catdot.nonal{background:var(--nonal)} .catdot.can{background:var(--can)} .catdot.draft{background:var(--draft)}
+.catdot.soft{background:var(--soft)} .catdot.nonal{background:var(--nonal)} .catdot.can{background:var(--can)} .catdot.draft{background:var(--draft)} .catdot.craft{background:var(--craft)}
 .stocknum{font-size:20px; font-weight:800; min-width:70px; text-align:right}
 .stocknum.low{color:var(--ng)}
 .tag{font-size:11px; padding:2px 8px; border-radius:99px; background:#eef1f6; color:var(--sub); flex:none}
@@ -158,7 +160,7 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
 
 <header>
   <span class="ttl">🍻 GFB</span>
-  <span id="locb" style="font-size:12px; background:#ffffff2b; padding:3px 9px; border-radius:99px"></span>
+  <button id="locb" onclick="toggleLoc()" style="font-size:12px; background:#ffffff2b; color:#fff; padding:3px 9px; border-radius:99px">…</button>
   <span id="chip">…</span>
   <button id="gear" onclick="go('settings')">⚙︎</button>
 </header>
@@ -199,7 +201,10 @@ label.fld{display:block; margin:10px 0 4px; font-size:13px; color:var(--sub); fo
 'use strict';
 /* ================= 基盤 ================= */
 const LS_KEY = 'fespos.v1';
-const CATS = { soft:'ソフトドリンク', nonal:'ノンアルコール', can:'缶のお酒', draft:'生ビール' };
+const CATS = { soft:'ソフトドリンク', nonal:'ノンアルコール', can:'缶のお酒', draft:'生ビール', craft:'クラフトビール' };
+// 価格はpricesテーブル(ジャンル単位)が正。未作成・未同期の間はproducts.priceへフォールバック
+const genrePrice = c => { const r=(S.priceRows||[]).find(x=>x.category===c); return r ? r.price : null; };
+const priceOf = p => { const g=genrePrice(p.category); return g!=null ? g : p.price; };
 const LOCS = ['坂下','坂上']; // 販売所の内部キー(既存データ互換のため値は据え置き)
 const LOC_LABEL = { '坂下':'坂ドリンク', '坂上':'丘の上ドリンク' }; // 表示名
 const locName = l => LOC_LABEL[l] || l || '';
@@ -237,6 +242,7 @@ const $id = id => document.getElementById(id);
 
 let S = {
   products:[], events:[], sales:[], cash:[], staff:[], staffDrinks:[],
+  priceRows:[], floats:[],
   outbox:[], pulls:{}, event: DEFAULT_EVENT,
   cfg:{ deviceId:uuid(), device:'レジ1', url:'', key:'', pass:'', threshold:10 },
 };
@@ -245,6 +251,8 @@ if (!S.cfg.loc) S.cfg.loc = LOCS[0];
 if (!S.event) S.event = DEFAULT_EVENT;
 if (!S.staff) S.staff = [];
 if (!S.staffDrinks) S.staffDrinks = [];
+if (!S.priceRows) S.priceRows = [];
+if (!S.floats) S.floats = [];
 const save = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){ toast('保存エラー: 容量不足の可能性'); } };
 
 let ui = { view:'register', cart:{}, devices:[], countInputs:{}, countResult:null, lastSyncAt:null, syncErr:false,
@@ -289,8 +297,8 @@ async function pushOutbox(){
         // 一意制約+ignore-duplicatesで再送しても二重登録されない(冪等)
         await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=ignore-duplicates'}, body:JSON.stringify([op.row]) });
       } else if (op.op==='upsert'){
-        // event_config用: 上書き更新(LWW)
-        await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=merge-duplicates'}, body:JSON.stringify([op.row]) });
+        // event_config/prices/cash_floats用: 上書き更新(LWW)
+        await sb(`${op.table}?on_conflict=${op.conflict||'id'}`, { method:'POST', headers:{Prefer:'resolution=merge-duplicates'}, body:JSON.stringify([op.row]) });
       } else {
         await sb(`${op.table}?id=eq.${op.id}`, { method:'PATCH', body:JSON.stringify(op.patch) });
       }
@@ -315,15 +323,18 @@ const PULLS = [
   { t:'sales', ts:'updated_at', arr:'sales' },
   { t:'cash_counts', ts:'created_at', arr:'cash' },
 ];
-const PULLS_V2 = [ // v2.0で追加。テーブル未作成でも既存の同期を巻き込まない
+const PULLS_V2 = [ // v2.0以降の追加。テーブル未作成でも既存の同期を巻き込まない
   { t:'staff', ts:'updated_at', arr:'staff' },
   { t:'staff_drinks', ts:'updated_at', arr:'staffDrinks' },
+  { t:'prices', ts:'updated_at', arr:'priceRows', key:'category' },
+  { t:'cash_floats', ts:'updated_at', arr:'floats' },
 ];
 async function pullTable(p){
   const since = S.pulls[p.t] || '1970-01-01T00:00:00Z';
+  const k = p.key || 'id';
   const rows = await sb(`${p.t}?select=*&${p.ts}=gte.${encodeURIComponent(since)}&order=${p.ts}.asc&limit=1000`, {method:'GET'});
   for (const row of rows){
-    const arr = S[p.arr]; const i = arr.findIndex(x=>x.id===row.id);
+    const arr = S[p.arr]; const i = arr.findIndex(x=>x[k]===row[k]);
     if (i>=0) arr[i]=row; else arr.push(row);
     if (!S.pulls[p.t] || row[p.ts] > S.pulls[p.t]) S.pulls[p.t] = row[p.ts];
   }
@@ -403,6 +414,12 @@ function upsertProductLocal(p, isNew){
 }
 
 /* ================= 画面遷移 ================= */
+function toggleLoc(){
+  const other = LOCS.find(l=>l!==S.cfg.loc) || LOCS[0];
+  if (!confirm(`販売所を「${locName(other)}」に切り替えますか?\nレジ・在庫・レジ点検が${locName(other)}のものになります。`)) return;
+  S.cfg.loc = other; ui.repLoc = null; ui.stLoc = null; ui.cart = {};
+  save(); render(); toast(`${locName(other)}に切り替えました`);
+}
 function go(v){
   ui.view = v;
   if (v==='tt') ui.ttWantScroll = true; // 当日は現在時刻へ自動スクロール
@@ -411,7 +428,7 @@ function go(v){
   window.scrollTo(0,0);
 }
 function render(){
-  $id('locb').textContent = locName(S.cfg.loc);
+  $id('locb').textContent = locName(S.cfg.loc) + ' ⇄';
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('act'));
   const el = $id('view-'+ui.view); el.classList.add('act');
   ({register:renderRegister, products:renderProducts, stock:renderStock, report:renderReport,
@@ -427,7 +444,7 @@ function renderRegister(){
   if (!prods.length){ el.innerHTML = `<div class="empty">${esc(locName(S.cfg.loc))}の商品が未登録です。<br>「商品」タブで登録するか、⚙︎設定で販売所を確認してください。</div>`; return; }
   const st = stockMap();
   let html = '';
-  for (const cat of ['soft','nonal','can','draft']){
+  for (const cat of ['soft','nonal','can','draft','craft']){
     const list = prods.filter(p=>p.category===cat);
     if (!list.length) continue;
     html += `<div class="cathead">${CATS[cat]}</div><div class="grid">`;
@@ -439,7 +456,7 @@ function renderRegister(){
       html += `<button class="prod cat-${cat} ${q?'sel':''}" ${soldout?'disabled':''}
         onclick="prodClick('${p.id}')" onpointerdown="prodDown('${p.id}')"
         onpointerup="prodPressEnd()" onpointerleave="prodPressEnd()" onpointercancel="prodPressEnd()">
-        <span class="pname">${esc(p.name)}</span><span class="pprice">${yen(p.price)}</span>
+        <span class="pname">${esc(p.name)}</span><span class="pprice">${yen(priceOf(p))}</span>
         ${cat==='draft'?'':`<span class="pstock ${low?'low':''}">${soldout?'売切':`残${s}`}</span>`}
         ${q?`<span class="psel">${q}</span>`:''}</button>`;
     }
@@ -485,7 +502,7 @@ function chgCart(pid, d){
   render();
 }
 function clearCart(){ ui.cart={}; render(); }
-const cartItems = () => Object.entries(ui.cart).map(([pid,qty])=>{ const p=prodById(pid); return {product_id:pid, name:p.name, qty, unit_price:p.price}; });
+const cartItems = () => Object.entries(ui.cart).map(([pid,qty])=>{ const p=prodById(pid); return {product_id:pid, name:p.name, qty, unit_price:priceOf(p)}; });
 const cartTotal = () => cartItems().reduce((a,it)=>a+it.qty*it.unit_price,0);
 function renderCart(){
   const bar = $id('cartbar');
@@ -583,20 +600,32 @@ function coDone(btn){
 
 /* ================= ② 商品・価格設定 ================= */
 const catPrice = c => {
+  const g = genrePrice(c);              // pricesテーブルが正
+  if (g!=null) return g;
   const ps = S.products.filter(p=>p.category===c);
   if (!ps.length) return '';
-  return ps.every(p=>p.price===ps[0].price) ? ps[0].price : ''; // 混在時は空欄
+  return ps.every(p=>p.price===ps[0].price) ? ps[0].price : ''; // 移行前は商品から導出
 };
 function applyCatPrices(){
   let n = 0;
-  for (const c of ['soft','nonal','can','draft']){
+  for (const c of ['soft','nonal','can','draft','craft']){
     const v = parseInt($id('cp-'+c).value,10);
     if (!(v>=0)) continue;
+    if (genrePrice(c)!==v){
+      // pricesテーブルへ(正)。テーブル未作成時は退避されローカル値が使われる
+      const row = { category:c, price:v, updated_at:nowIso() };
+      const i = S.priceRows.findIndex(x=>x.category===c);
+      if (i>=0) S.priceRows[i]=row; else S.priceRows.push(row);
+      S.outbox.push({op:'upsert', table:'prices', conflict:'category', row});
+      n++;
+    }
+    // 互換: 旧バージョンの端末のために products.price も揃えておく
     for (const p of S.products.filter(p=>p.category===c && p.price!==v)){
-      upsertProductLocal({...p, price:v, updated_at:nowIso()}, false); n++;
+      upsertProductLocal({...p, price:v, updated_at:nowIso()}, false);
     }
   }
-  render(); toast(n ? `${n}商品の価格を更新しました` : '変更はありません');
+  save(); syncTick(); render();
+  toast(n ? '価格を更新しました(全端末に反映されます)' : '変更はありません');
 }
 function renderProducts(){
   const el = $id('view-products');
@@ -609,16 +638,16 @@ function renderProducts(){
     </div>
     <div class="card">
       <b>ジャンル一律価格</b>
-      ${['soft','nonal','can','draft'].map(c=>`
+      ${['soft','nonal','can','draft','craft'].map(c=>`
         <div class="row" style="margin-top:8px"><span class="grow">${CATS[c]}</span>
           <input id="cp-${c}" type="number" inputmode="numeric" value="${catPrice(c)}" placeholder="未設定" style="width:110px; text-align:right"><span class="sub">円</span></div>`).join('')}
       <button class="btn primary sm" style="margin-top:12px" onclick="applyCatPrices()">一律価格を適用</button>
-      <p class="sub">各ジャンルの全商品(両販売所)に適用されます。生ビールは1種類のみなのでここが唯一の価格設定です。</p>
+      <p class="sub">価格はジャンル単位で管理され、全商品(両販売所)・全端末に反映されます。</p>
     </div>
     <div class="card">${act.length ? act.map((p,i)=>`
       <div class="listrow"><span class="catdot ${p.category}"></span>
         <span class="grow"><b>${esc(p.name)}</b><br><span class="sub">${CATS[p.category]} ・ ${esc(locName(locOf(p)))}</span></span>
-        <b>${yen(p.price)}</b>
+        <b>${yen(priceOf(p))}</b>
         <button class="btn sm" ${i===0?'disabled':''} onclick="moveProd('${p.id}',-1)">↑</button>
         <button class="btn sm" ${i===act.length-1?'disabled':''} onclick="moveProd('${p.id}',1)">↓</button>
         <button class="btn sm" onclick="editProd('${p.id}')">編集</button></div>`).join('')
@@ -637,8 +666,7 @@ function editProd(pid){
     <select id="f-cat">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${p&&p.category===k?'selected':''}>${v}</option>`).join('')}</select>
     <label class="fld">販売所</label>
     <select id="f-loc">${LOCS.map(l=>`<option value="${l}" ${(p?locOf(p):S.cfg.loc)===l?'selected':''}>${locName(l)}</option>`).join('')}</select>
-    <label class="fld">価格(円)</label><input id="f-price" type="number" inputmode="numeric" value="${p?p.price:''}" placeholder="例: 500">
-    <p class="sub">価格はジャンル一律 — 保存すると同ジャンルの全商品に適用されます</p>
+    <p class="sub">価格はジャンル一律(商品ページ上部で設定)。この商品には選んだジャンルの価格が自動で付きます。</p>
     <button class="btn primary" style="width:100%; margin-top:16px; padding:14px" onclick="saveProd('${pid||''}')">保存</button>
     ${p?`<button class="btn danger" style="width:100%; margin-top:8px" onclick="hideProd('${pid}')">この商品を非表示にする</button>`:''}`;
   $id('modal').classList.add('open');
@@ -648,8 +676,9 @@ function saveProd(pid){
   const name = $id('f-name').value.trim();
   const category = $id('f-cat').value;
   const location = $id('f-loc').value;
-  const price = parseInt($id('f-price').value,10);
-  if (!name || !(price>=0)) { toast('商品名と価格を入力してください'); return; }
+  const price = parseInt(catPrice(category),10); // ジャンル一律価格を自動適用
+  if (!name){ toast('商品名を入力してください'); return; }
+  if (!(price>=0)){ toast(`${CATS[category]}の価格が未設定です。商品ページ上部の「ジャンル一律価格」で先に設定してください`); return; }
   // 生ビールは全体で1種のみ(要件)
   if (category==='draft' && S.products.some(p=>p.active && p.category==='draft' && p.id!==pid)){
     toast('生ビールは1種類のみ登録できます'); return;
@@ -988,32 +1017,60 @@ function csvSummary(){
 }
 
 /* ================= ⑥ レジ点検 ================= */
+const floatRowFor = (day, loc) => (S.floats||[]).find(f=>f.day===day && f.location===loc);
+function floatTotalFor(day, loc){
+  const r = floatRowFor(day, loc);
+  if (r) return r.total;
+  // cash_floats未作成(移行前)のフォールバック: 端末ローカルの旧保存値
+  if (loc===S.cfg.loc && S.floatCounts) return DENOMS.reduce((a,d)=>a+(S.floatCounts[d]||0)*d,0);
+  return 0;
+}
 function renderCash(){
   const el = $id('view-cash');
   // 点検は必ず当日・自販売所基準(前日分の売上金はレジから回収済みの前提)
-  const st = salesStats(localDay(nowIso()), S.cfg.loc);
-  el.innerHTML = `
-    <div class="toolbar"><button class="btn" onclick="go('report')">← 集計へ戻る</button></div>
-    <h2>レジ点検(現金実査・${esc(locName(S.cfg.loc))})</h2>
-    <div class="card">
-      <div class="kv"><span>本日の現金売上(理論)</span><b>${yen(st.cash)}</b></div>
-      <label class="fld">釣り銭準備金(開始時の金庫残高) — 金種ごとに枚数を数えて入力</label>
-      ${DENOMS.map(d=>`
-        <div class="row" style="margin-top:6px">
-          <span style="min-width:92px">${denomName(d)}</span>
-          <input id="fc-${d}" type="number" inputmode="numeric" placeholder="0"
-            value="${(ui.cashDraft&&ui.cashDraft['fc-'+d])??((S.floatCounts&&S.floatCounts[d])||'')}"
-            style="width:90px; text-align:right" oninput="stashCash(this)">
-          <span class="sub" style="min-width:22px">枚</span>
-          <span class="grow right sub" id="fs-${d}"></span>
-        </div>`).join('')}
+  const today = localDay(nowIso());
+  const st = salesStats(today, S.cfg.loc);
+  const mode = ui.cashMode || 'counted';
+  const flo = floatTotalFor(today, S.cfg.loc);
+  const denomRows = (draft, saved, handler) => DENOMS.map(d=>`
+    <div class="row" style="margin-top:6px">
+      <span style="min-width:92px">${denomName(d)}</span>
+      <input id="fc-${d}" type="number" inputmode="numeric" placeholder="0"
+        value="${(draft&&draft['fc-'+d])??((saved&&saved[d])||'')}"
+        style="width:90px; text-align:right" oninput="${handler}(this)">
+      <span class="sub" style="min-width:22px">枚</span>
+      <span class="grow right sub" id="fs-${d}"></span>
+    </div>`).join('');
+  let body;
+  if (mode==='float'){
+    const row = floatRowFor(today, S.cfg.loc);
+    body = `
+      <p class="sub">開始時の金庫残高(釣り銭)を金種ごとに数えて保存。${dayChipLabel(today)}の${esc(locName(S.cfg.loc))}の準備金として全端末に共有されます。</p>
+      ${denomRows(ui.floatDraft, row && row.counts, 'stashFloat')}
       <div class="kv" style="margin-top:8px"><span>準備金 合計</span><b id="f-floatsum">¥0</b></div>
-      <label class="fld">実際のレジ金を数えて入力</label><input id="f-counted" type="number" inputmode="numeric" placeholder="例: 52000"
-        value="${(ui.cashDraft&&ui.cashDraft['f-counted'])||''}" oninput="stashCash(this)">
+      <button class="btn primary" style="width:100%; margin-top:14px; padding:14px" onclick="saveFloat()">準備金を保存</button>`;
+  } else {
+    body = `
+      <div class="kv"><span>本日の現金売上(理論)</span><b>${yen(st.cash)}</b></div>
+      <div class="kv"><span>釣り銭準備金(${dayChipLabel(today)})</span><b>${yen(flo)}</b></div>
+      <label class="fld">実際のレジ金 — 金種ごとに枚数を数えて入力</label>
+      ${denomRows(ui.cashDraft, null, 'stashCash')}
+      <div class="kv" style="margin-top:8px"><span>実際のレジ金 合計</span><b id="f-floatsum">¥0</b></div>
       <div class="kv"><span>差額(実際 − 理論)</span><b id="f-diff">—</b></div>
       <label class="fld">メモ(任意)</label><input id="f-cnote" placeholder="例: 交代時点検"
         value="${esc((ui.cashDraft&&ui.cashDraft['f-cnote'])||'')}" oninput="stashCash(this)">
-      <button class="btn primary" style="width:100%; margin-top:14px; padding:14px" onclick="saveCashCount(${st.cash})">記録する</button>
+      <button class="btn primary" style="width:100%; margin-top:14px; padding:14px" onclick="saveCashCount()">点検を記録する</button>`;
+  }
+  el.innerHTML = `
+    <div class="toolbar"><button class="btn" onclick="go('report')">← 集計へ戻る</button></div>
+    <h2>レジ点検(${esc(locName(S.cfg.loc))})</h2>
+    <div class="card">
+      <label class="fld">入力する項目</label>
+      <select onchange="ui.cashMode=this.value; render()">
+        <option value="counted" ${mode==='counted'?'selected':''}>実際のレジ金(点検)</option>
+        <option value="float" ${mode==='float'?'selected':''}>釣り銭準備金(開始時の金庫残高)</option>
+      </select>
+      ${body}
     </div>
     <h2>点検履歴</h2>
     <div class="card">${S.cash.length ? [...S.cash].sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(c=>`
@@ -1021,10 +1078,10 @@ function renderCash(){
         <span class="grow">実際 ${yen(c.counted_amount)} / 理論 ${yen(c.theoretical_amount)}${c.location?` <span class="tag">${esc(locName(c.location))}</span>`:''}${c.note?`<br><span class="sub">${esc(c.note)}</span>`:''}</span>
         <b class="${c.diff===0?'':(c.diff>0?'diffpos':'diffneg')}">${c.diff>0?'+':''}${yen(c.diff).replace('¥-','−¥')}</b></div>`).join('')
       : '<div class="empty">まだ記録がありません</div>'}</div>`;
-  cashDiff(); // 記憶済みの枚数から小計・合計を初期表示
+  denomSum();
+  if (mode==='counted') cashDiff();
 }
-function stashCash(el){ (ui.cashDraft = ui.cashDraft || {})[el.id] = el.value; cashDiff(); }
-function floatAmount(){
+function denomSum(){
   let sum = 0;
   for (const d of DENOMS){
     const n = parseInt(($id('fc-'+d)||{}).value,10)||0;
@@ -1034,21 +1091,35 @@ function floatAmount(){
   const t = $id('f-floatsum'); if (t) t.textContent = yen(sum);
   return sum;
 }
+function stashCash(el){ (ui.cashDraft = ui.cashDraft || {})[el.id] = el.value; cashDiff(); }
+function stashFloat(el){ (ui.floatDraft = ui.floatDraft || {})[el.id] = el.value; denomSum(); }
 function cashDiff(){
-  const counted = parseInt($id('f-counted').value,10);
-  const theo = salesStats(localDay(nowIso()), S.cfg.loc).cash + floatAmount();
-  $id('f-diff').textContent = isNaN(counted) ? '—' : yen(counted-theo).replace('¥-','−¥');
+  const today = localDay(nowIso());
+  const counted = denomSum();
+  const any = DENOMS.some(d=>($id('fc-'+d)||{}).value);
+  const theo = salesStats(today, S.cfg.loc).cash + floatTotalFor(today, S.cfg.loc);
+  const el = $id('f-diff'); if (el) el.textContent = any ? yen(counted-theo).replace('¥-','−¥') : '—';
 }
-function saveCashCount(cashSales){
-  const counted = parseInt($id('f-counted').value,10);
-  if (isNaN(counted)){ toast('実際のレジ金を入力してください'); return; }
-  const flo = floatAmount();
-  // 数えた枚数は端末に記憶(同日の再点検で数え直さなくて済む)
-  S.floatCounts = {};
-  for (const d of DENOMS){ const n = parseInt($id('fc-'+d).value,10)||0; if (n) S.floatCounts[d] = n; }
-  const theo = cashSales + flo;
+function saveFloat(){
+  const today = localDay(nowIso());
+  const counts = {}; let total = 0;
+  for (const d of DENOMS){ const n = parseInt(($id('fc-'+d)||{}).value,10)||0; if (n){ counts[d]=n; total+=n*d; } }
+  const row = { id:`${today}|${S.cfg.loc}`, day:today, location:S.cfg.loc, counts, total, updated_at:nowIso() };
+  const i = S.floats.findIndex(f=>f.id===row.id); if (i>=0) S.floats[i]=row; else S.floats.push(row);
+  S.floatCounts = counts; // 旧バージョン端末とテーブル未作成時の互換用
+  S.outbox.push({op:'upsert', table:'cash_floats', row});
+  ui.floatDraft = null; ui.cashMode = 'counted';
+  save(); syncTick(); render(); toast(`準備金 ${yen(total)} を保存しました`);
+}
+function saveCashCount(){
+  const today = localDay(nowIso());
+  const counted = denomSum();
+  const any = DENOMS.some(d=>($id('fc-'+d)||{}).value);
+  if (!any){ toast('金種の枚数を入力してください'); return; }
+  const flo = floatTotalFor(today, S.cfg.loc);
+  const theo = salesStats(today, S.cfg.loc).cash + flo;
   const rec = { id:uuid(), location:S.cfg.loc, counted_amount:counted, float_amount:flo, theoretical_amount:theo, diff:counted-theo,
-    note:$id('f-cnote').value.trim()||null, created_at:nowIso() };
+    note:($id('f-cnote')||{value:''}).value.trim()||null, created_at:nowIso() };
   S.cash.push(rec);
   S.outbox.push({op:'insert', table:'cash_counts', row:rec});
   ui.cashDraft = null;
@@ -1602,7 +1673,7 @@ function saveEvent(){
 }
 async function repull(){
   if (S.outbox.length && !confirm(`未送信が${S.outbox.length}件あります。先に同期するのが安全です。続行しますか?`)) return;
-  S.pulls={}; S.products=[]; S.events=[]; S.sales=[]; S.cash=[]; S.staff=[]; S.staffDrinks=[];
+  S.pulls={}; S.products=[]; S.events=[]; S.sales=[]; S.cash=[]; S.staff=[]; S.staffDrinks=[]; S.priceRows=[]; S.floats=[];
   save(); toast('再取得中…'); await syncTick();
 }
 function wipe(){
