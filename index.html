@@ -281,10 +281,15 @@ async function sb(path, opts={}){
   // 旧形式(JWTのanon key)はBearer必須、新形式(sb_publishable_)はapikeyのみ(Bearerに載せると401)
   const headers = { apikey:key, 'Content-Type':'application/json', ...(opts.headers||{}) };
   if (key.startsWith('eyJ')) headers.Authorization = 'Bearer '+key;
-  const res = await fetch(S.cfg.url.replace(/\/+$/,'') + '/rest/v1/' + path, { ...opts, headers });
-  if (!res.ok) throw new Error('HTTP '+res.status+' '+(await res.text()).slice(0,200));
-  const txt = await res.text();
-  return txt ? JSON.parse(txt) : null;
+  // 会場の不安定な回線でリクエストが無応答のまま固まると同期全体が止まるため、15秒で打ち切って次tickに再試行
+  const ctl = new AbortController();
+  const tm = setTimeout(()=>ctl.abort(), 15000);
+  try {
+    const res = await fetch(S.cfg.url.replace(/\/+$/,'') + '/rest/v1/' + path, { ...opts, headers, signal: ctl.signal });
+    if (!res.ok) throw new Error('HTTP '+res.status+' '+(await res.text()).slice(0,200));
+    const txt = await res.text();
+    return txt ? JSON.parse(txt) : null;
+  } finally { clearTimeout(tm); }
 }
 const RETRY_4XX = new Set([401,403,408,425,429]); // 認証・タイムアウト・レート制限は一時的とみなし再送
 async function pushOutbox(){
@@ -369,9 +374,10 @@ async function syncTick(){
   if (!cfgOk() || syncing) return;
   syncing = true;
   try {
+    await heartbeat(); // 送信前に実態(未送信件数)を報告: 送信が失敗する端末ほど報告が必要なため
     await pushOutbox();
     await pullAll();
-    await heartbeat();
+    await heartbeat(); // 送信後の最新状態も反映
     ui.lastSyncAt = Date.now(); ui.syncErr = false;
   } catch(e){ ui.syncErr = true; console.warn('sync:', e.message); }
   syncing = false;
@@ -516,14 +522,19 @@ function chgCart(pid, d){
   }
   render();
 }
-function clearCart(){ ui.cart={}; render(); }
+function clearCart(){
+  if (Object.keys(ui.cart).length && !confirm('選択をすべてクリアしますか?')) return; // 会計へボタンの隣なので誤タップ防止
+  ui.cart={}; render();
+}
 const cartItems = () => Object.entries(ui.cart).map(([pid,qty])=>{ const p=prodById(pid); return {product_id:pid, name:p.name, qty, unit_price:priceOf(p)}; });
 const cartTotal = () => cartItems().reduce((a,it)=>a+it.qty*it.unit_price,0);
 function renderCart(){
   const bar = $id('cartbar');
   const items = cartItems();
-  if (ui.view!=='register' || !items.length){ bar.style.display='none'; return; }
+  const main = document.querySelector('main');
+  if (ui.view!=='register' || !items.length){ bar.style.display='none'; main.style.paddingBottom=''; return; }
   bar.style.display='block';
+  main.style.paddingBottom='46vh'; // カートバーの背後に隠れる商品(生ビール等)までスクロールできるように
   const cnt = items.reduce((a,i)=>a+i.qty,0);
   $id('cartinner').innerHTML = `<div class="sub" style="text-align:center; padding-top:4px">商品ボタン: タップで+1 / 長押しで解除</div>` + items.map(it=>`
     <div class="cartrow"><span class="nm">${esc(it.name)}</span>
@@ -849,9 +860,19 @@ function renderCount(){
   const el = $id('view-count');
   const prods = locProducts(); // 自販売所の商品のみ。生ビールも対象(残りの使い捨てカップ数を数える)
   const others = ui.devices.filter(d=>d.id!==S.cfg.deviceId && d.pending>0);
+  // 最終同期が古い端末 = オフラインで未送信を抱えている可能性(1〜120分前のものだけ表示。それ以前は閉じた端末とみなす)
+  const staleDevs = ui.devices.filter(d=>{
+    if (d.id===S.cfg.deviceId || d.pending>0) return false;
+    const age = Date.now() - new Date(d.last_seen).getTime();
+    return age > 90*1000 && age < 120*60*1000;
+  }).slice(0,4);
   let warn = '';
   if (S.outbox.length) warn += `<div class="banner warn">⚠️ この端末に未送信の記録が${S.outbox.length}件あります。同期を待ってから数えてください。</div>`;
   for (const d of others) warn += `<div class="banner warn">⚠️ 端末「${esc(d.name)}」に未送信の記録が${d.pending}件あります。</div>`;
+  for (const d of staleDevs){
+    const min = Math.round((Date.now()-new Date(d.last_seen).getTime())/60000);
+    warn += `<div class="banner warn">⚠️ 端末「${esc(d.name)}」の最終同期が${min}分前です。圏外で未送信を抱えている可能性があります(アプリを閉じただけなら無視してOK)。</div>`;
+  }
   if (!warn && cfgOk()) warn = `<div class="banner info">全端末が「同期OK」であることを確認してから数え始めてください。</div>`;
 
   if (ui.countResult){
@@ -986,7 +1007,7 @@ function renderReport(){
         && (new Date(s.created_at)-new Date(prev.created_at)) < 30000;
       return `
       <div class="listrow ${s.status==='cancelled'?'cancelled':''}">
-        <span class="sub" style="font-variant-numeric:tabular-nums">${hhmmss(s.created_at)}</span>
+        <span class="sub" style="font-variant-numeric:tabular-nums">${day==='all'?dayLabel(localDay(s.created_at))+'<br>':''}${hhmmss(s.created_at)}</span>
         <span class="grow">${s.items.map(i2=>`${esc(i2.name)}×${i2.qty}`).join(' ')}
           ${dup?'<span class="tag" style="background:#fdeaea;color:var(--ng)">⚠ 直前と同一内容</span>':''}<br>
           <span class="sub">${s.payment==='cash'?'現金':'PayPay'} / ${esc(locName(s.location))} ${esc(s.device||'')}</span></span>
@@ -1050,11 +1071,10 @@ function csvSummary(){
 /* ================= ⑥ レジ点検 ================= */
 const floatRowFor = (day, loc) => (S.floats||[]).find(f=>f.day===day && f.location===loc);
 function floatTotalFor(day, loc){
+  // その日のcash_floats行だけを見る。端末ローカルへのフォールバックは日付を跨いで
+  // 前日の額を今日の準備金として誤表示するためv2.2で撤去(テーブルは稼働済み)
   const r = floatRowFor(day, loc);
-  if (r) return r.total;
-  // cash_floats未作成(移行前)のフォールバック: 端末ローカルの旧保存値
-  if (loc===S.cfg.loc && S.floatCounts) return DENOMS.reduce((a,d)=>a+(S.floatCounts[d]||0)*d,0);
-  return 0;
+  return r ? r.total : 0;
 }
 function renderCash(){
   const el = $id('view-cash');
@@ -1275,7 +1295,7 @@ function renderStats(){
   el.innerHTML = `
     <div class="toolbar"><button class="btn" onclick="go('report')">← 集計へ戻る</button></div>
     <div class="chips" style="margin-bottom:2px">
-      ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="ui.stLoc='${l}';ui.binSel=null;render()">${locName(l)}</button>`).join('')}
+      ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="ui.stLoc='${l}';ui.stProd='all';ui.binSel=null;render()">${locName(l)}</button>`).join('')}
     </div>
     <div class="chips" style="margin-bottom:2px">
       ${days.map(d=>`<button class="${day===d?'sel':''}" onclick="ui.stDay='${d}';ui.binSel=null;render()">${dayChipLabel(d)}</button>`).join('')}
