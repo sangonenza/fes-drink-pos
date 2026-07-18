@@ -627,44 +627,58 @@ function applyCatPrices(){
 }
 function renderProducts(){
   const el = $id('view-products');
-  const act = activeProducts();
-  const inact = S.products.filter(p=>!p.active);
+  const loc = ui.prodLoc || S.cfg.loc;
+  const act = activeProducts().filter(p=>locOf(p)===loc);
+  const inact = S.products.filter(p=>!p.active && locOf(p)===loc);
   el.innerHTML = `
     <div class="toolbar">
       <button class="btn" onclick="go('stock')">← 在庫へ戻る</button>
-      <button class="btn primary" onclick="editProd(null)">＋ 商品を追加</button>
+      <button class="btn primary" onclick="editProd(null)">＋ ${esc(locName(loc))}に商品を追加</button>
     </div>
+    <div class="chips" style="margin-bottom:10px">
+      ${LOCS.map(l=>`<button class="${loc===l?'sel':''}" onclick="ui.prodLoc='${l}';render()">${locName(l)}</button>`).join('')}
+    </div>
+    ${act.length===0 ? `<div class="banner info">${esc(locName(loc))}の商品はまだありません。上の「＋ 商品を追加」から登録してください(名前とジャンルを選ぶだけ。価格はジャンルに応じて自動)。</div>` : ''}
+    ${['soft','nonal','can','draft','craft'].map(c=>{
+      const list = act.filter(p=>p.category===c);
+      const gp = catPrice(c);
+      if (!list.length && (c==='craft')) return ''; // 空のクラフト欄は非表示(使う時だけ)
+      return `<div class="card">
+        <div class="row" style="margin-bottom:4px"><span class="catdot ${c}"></span><b class="grow">${CATS[c]}</b>
+          <span class="tag">${gp!==''?('1本 '+yen(gp)):'価格未設定'}</span></div>
+        ${list.length ? list.map((p,i)=>`
+          <div class="listrow">
+            <span class="grow">${esc(p.name)}</span>
+            <button class="btn sm" ${i===0?'disabled':''} onclick="moveProd('${p.id}',-1)">↑</button>
+            <button class="btn sm" ${i===list.length-1?'disabled':''} onclick="moveProd('${p.id}',1)">↓</button>
+            <button class="btn sm" onclick="editProd('${p.id}')">編集</button></div>`).join('')
+          : '<div class="sub" style="padding:6px 2px">なし</div>'}
+      </div>`;
+    }).join('')}
+    <h2>ジャンル一律価格の変更</h2>
     <div class="card">
-      <b>ジャンル一律価格</b>
       ${['soft','nonal','can','draft','craft'].map(c=>`
-        <div class="row" style="margin-top:8px"><span class="grow">${CATS[c]}</span>
+        <div class="row" style="margin-top:8px"><span class="catdot ${c}"></span><span class="grow">${CATS[c]}</span>
           <input id="cp-${c}" type="number" inputmode="numeric" value="${catPrice(c)}" placeholder="未設定" style="width:110px; text-align:right"><span class="sub">円</span></div>`).join('')}
       <button class="btn primary sm" style="margin-top:12px" onclick="applyCatPrices()">一律価格を適用</button>
-      <p class="sub">価格はジャンル単位で管理され、全商品(両販売所)・全端末に反映されます。</p>
+      <p class="sub">価格はジャンル単位。変更すると全商品(両販売所)・全端末に反映されます。</p>
     </div>
-    <div class="card">${act.length ? act.map((p,i)=>`
-      <div class="listrow"><span class="catdot ${p.category}"></span>
-        <span class="grow"><b>${esc(p.name)}</b><br><span class="sub">${CATS[p.category]} ・ ${esc(locName(locOf(p)))}</span></span>
-        <b>${yen(priceOf(p))}</b>
-        <button class="btn sm" ${i===0?'disabled':''} onclick="moveProd('${p.id}',-1)">↑</button>
-        <button class="btn sm" ${i===act.length-1?'disabled':''} onclick="moveProd('${p.id}',1)">↓</button>
-        <button class="btn sm" onclick="editProd('${p.id}')">編集</button></div>`).join('')
-      : '<div class="empty">商品がありません</div>'}</div>
-    ${inact.length?`<h2>非表示の商品</h2><div class="card">${inact.map(p=>`
+    ${inact.length?`<h2>非表示の商品(${esc(locName(loc))})</h2><div class="card">${inact.map(p=>`
       <div class="listrow"><span class="catdot ${p.category}"></span>
         <span class="grow" style="opacity:.6">${esc(p.name)}</span>
         <button class="btn sm" onclick="reviveProd('${p.id}')">再表示</button></div>`).join('')}</div>`:''}`;
 }
 function editProd(pid){
   const p = pid ? prodById(pid) : null;
+  const defLoc = p ? locOf(p) : (ui.prodLoc || S.cfg.loc);
   const box = $id('mbox');
-  box.innerHTML = `<div class="mhead"><b>${p?'商品を編集':'商品を追加'}</b><button class="x" onclick="closeModal()">閉じる</button></div>
+  box.innerHTML = `<div class="mhead"><b>${p?'商品を編集':`商品を追加(${esc(locName(defLoc))})`}</b><button class="x" onclick="closeModal()">閉じる</button></div>
     <label class="fld">商品名</label><input id="f-name" value="${p?esc(p.name):''}" placeholder="例: アクエリアス">
-    <label class="fld">カテゴリ</label>
-    <select id="f-cat">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${p&&p.category===k?'selected':''}>${v}</option>`).join('')}</select>
+    <label class="fld">ジャンル(価格が決まります)</label>
+    <select id="f-cat">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${p&&p.category===k?'selected':''}>${v} — ${catPrice(k)!==''?yen(catPrice(k)):'価格未設定'}</option>`).join('')}</select>
     <label class="fld">販売所</label>
-    <select id="f-loc">${LOCS.map(l=>`<option value="${l}" ${(p?locOf(p):S.cfg.loc)===l?'selected':''}>${locName(l)}</option>`).join('')}</select>
-    <p class="sub">価格はジャンル一律(商品ページ上部で設定)。この商品には選んだジャンルの価格が自動で付きます。</p>
+    <select id="f-loc">${LOCS.map(l=>`<option value="${l}" ${defLoc===l?'selected':''}>${locName(l)}</option>`).join('')}</select>
+    <p class="sub">入力はこれだけ。価格はジャンルに応じて自動で付きます(変更は商品ページ下部の「ジャンル一律価格」から)。</p>
     <button class="btn primary" style="width:100%; margin-top:16px; padding:14px" onclick="saveProd('${pid||''}')">保存</button>
     ${p?`<button class="btn danger" style="width:100%; margin-top:8px" onclick="hideProd('${pid}')">この商品を非表示にする</button>`:''}`;
   $id('modal').classList.add('open');
@@ -700,13 +714,15 @@ function hideProd(pid){
 }
 function reviveProd(pid){ upsertProductLocal({...prodById(pid), active:true, updated_at:nowIso()}, false); render(); }
 function moveProd(pid, dir){
-  const act = activeProducts();
-  const i = act.findIndex(p=>p.id===pid); const j = i+dir;
-  if (j<0 || j>=act.length) return;
-  const a = act[i], b = act[j];
-  const tmp = a.sort_order;
-  upsertProductLocal({...a, sort_order:b.sort_order, updated_at:nowIso()}, false);
-  upsertProductLocal({...b, sort_order:tmp, updated_at:nowIso()}, false);
+  const p0 = prodById(pid);
+  // 並べ替えは同じ販売所・同じジャンル内で完結(レジもジャンル内順で表示するため)
+  const sib = activeProducts().filter(q=>locOf(q)===locOf(p0) && q.category===p0.category);
+  const i = sib.findIndex(q=>q.id===pid); const j = i+dir;
+  if (j<0 || j>=sib.length) return;
+  const a = sib[i], b = sib[j];
+  const newA = a.sort_order===b.sort_order ? b.sort_order+dir : b.sort_order; // 同値のときも動くように
+  upsertProductLocal({...a, sort_order:newA, updated_at:nowIso()}, false);
+  upsertProductLocal({...b, sort_order:a.sort_order, updated_at:nowIso()}, false);
   render();
 }
 
