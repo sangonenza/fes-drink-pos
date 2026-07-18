@@ -439,7 +439,17 @@ function render(){
 function renderRegister(){
   const el = $id('view-register');
   const prods = locProducts();
-  if (!prods.length){ el.innerHTML = `<div class="empty">${esc(locName(S.cfg.loc))}の商品が未登録です。<br>「商品」タブで登録するか、⚙︎設定で販売所を確認してください。</div>`; return; }
+  if (!prods.length){
+    const other = LOCS.find(l=>l!==S.cfg.loc) || LOCS[0];
+    el.innerHTML = `<div class="empty">
+      <b>${esc(locName(S.cfg.loc))}にはまだ商品がありません</b><br>
+      <span class="sub">この端末の販売所は「${esc(locName(S.cfg.loc))}」です</span>
+      <div style="margin-top:16px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
+        <button class="btn primary" onclick="ui.prodLoc=S.cfg.loc; go('products')">🏷 ${esc(locName(S.cfg.loc))}に商品を登録する</button>
+        <button class="btn" onclick="toggleLoc()">⇄ ${esc(locName(other))}のレジに切り替える</button>
+      </div></div>`;
+    return;
+  }
   const st = stockMap();
   let html = '';
   for (const cat of ['soft','nonal','can','draft','craft']){
