@@ -293,10 +293,17 @@ async function pushOutbox(){
     try {
       if (op.op==='insert'){
         // 一意制約+ignore-duplicatesで再送しても二重登録されない(冪等)
-        await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=ignore-duplicates'}, body:JSON.stringify([op.row]) });
+        // 同期カーソル列はサーバ時刻で刻印する(端末時計で刻むと、オフライン明けに
+        // 送った行のタイムスタンプが他端末のプルカーソルより古くなり、永久に取り逃される)
+        const body = {...op.row};
+        delete body.updated_at;
+        if (op.table==='stock_events' || op.table==='cash_counts') delete body.created_at; // カーソルがcreated_atの表
+        await sb(`${op.table}?on_conflict=id`, { method:'POST', headers:{Prefer:'resolution=ignore-duplicates'}, body:JSON.stringify([body]) });
       } else if (op.op==='upsert'){
-        // event_config/prices/cash_floats用: 上書き更新(LWW)
-        await sb(`${op.table}?on_conflict=${op.conflict||'id'}`, { method:'POST', headers:{Prefer:'resolution=merge-duplicates'}, body:JSON.stringify([op.row]) });
+        // event_config/prices/cash_floats用: 上書き更新(LWW)。同上の理由でupdated_atはサーバ刻印
+        const body = {...op.row};
+        delete body.updated_at;
+        await sb(`${op.table}?on_conflict=${op.conflict||'id'}`, { method:'POST', headers:{Prefer:'resolution=merge-duplicates'}, body:JSON.stringify([body]) });
       } else {
         await sb(`${op.table}?id=eq.${op.id}`, { method:'PATCH', body:JSON.stringify(op.patch) });
       }
@@ -1236,8 +1243,19 @@ function renderStats(){
   })() : 'グラフをタップすると5分枠の本数を表示';
 
   // 円グラフ(銘柄シェア・その日の全銘柄)
-  const pieEntries = prods.map((p,idx)=>({ name:p.name, qty:(byProd[p.id]||{}).qty||0, color:PIE_COLORS[idx%PIE_COLORS.length] }))
-    .filter(e=>e.qty>0);
+  // 8色を使い回すと別商品が同色になるため、9品目以上は上位8+「その他」に畳む
+  let pieRaw = prods.map(p=>({ p, qty:(byProd[p.id]||{}).qty||0 })).filter(e=>e.qty>0);
+  let pieEntries;
+  if (pieRaw.length > PIE_COLORS.length){
+    pieRaw.sort((a,b)=>b.qty-a.qty);
+    const top = pieRaw.slice(0, PIE_COLORS.length), rest = pieRaw.slice(PIE_COLORS.length);
+    top.sort((a,b)=>a.p.sort_order-b.p.sort_order); // 色は商品の並び順に固定(順位で塗り替えない)
+    pieEntries = top.map((e,i)=>({ name:e.p.name, qty:e.qty, color:PIE_COLORS[i] }));
+    pieEntries.push({ name:`その他(${rest.length}品目)`, qty:rest.reduce((a,e)=>a+e.qty,0), color:'#898781' });
+  } else {
+    pieRaw.sort((a,b)=>a.p.sort_order-b.p.sort_order);
+    pieEntries = pieRaw.map((e,i)=>({ name:e.p.name, qty:e.qty, color:PIE_COLORS[i] }));
+  }
   const pieTotal = pieEntries.reduce((a,e)=>a+e.qty,0);
   let pieSvg = '';
   if (pieTotal>0){
